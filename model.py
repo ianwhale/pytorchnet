@@ -17,15 +17,21 @@ class Model:
 
     def __init__(self, args):
         self.cuda = args.cuda
-        # self.dropout = args.dropout
-        # self.nfilters = args.nfilters
-        # self.nclasses = args.nclasses
-        # self.nchannels = args.nchannels
+        #self.dropout = args.dropout
+        self.nfilters = args.nfilters
+        self.nclasses = args.nclasses
+        self.nchannels = args.nchannels
+        self.ngpu = args.ngpu
 
     def setup(self, checkpoints):
-        model = models.Net()
-        # model = models.resnet18(self.nchannels, self.nfilters, self.nclasses)
+       # model = models.Net()
+        model = models.resnet18(self.nchannels, self.nfilters, self.nclasses)
         criterion = losses.Classification()
+        
+        if self.cuda:
+            model = nn.DataParallel(model,device_ids=list(range(self.ngpu)))
+            model = model.cuda()
+            criterion = criterion.cuda()
 
         if checkpoints.latest('resume') == None:
             model.apply(weights_init)
@@ -33,8 +39,9 @@ class Model:
             tmp = checkpoints.load(checkpoints['resume'])
             model.load_state_dict(tmp)
 
-        if self.cuda:
-            model = model.cuda()
-            criterion = criterion.cuda()
+        #if self.cuda:
+        #    model = nn.DataParallel(model,device_ids=list(range(self.ngpu)))
+        #    model = model.cuda()
+        #    criterion = criterion.cuda()
 
         return model, criterion

@@ -19,6 +19,7 @@ class Trainer():
         self.dir_save = args.save
                 
         self.cuda = args.cuda
+        self.ngpu = args.ngpu
         self.nepochs = args.nepochs
         self.nclasses = args.nclasses
         self.nchannels = args.nchannels
@@ -54,14 +55,14 @@ class Trainer():
         self.label = Variable(self.label)
         
         # logging training 
-        self.log_loss_train = plugins.Logger(args.logs, 'TrainLogger.txt')
+        #self.log_loss_train = plugins.Logger(args.logs, 'TrainLogger.txt')
         self.params_loss_train = ['Loss','Accuracy']
-        self.log_loss_train.register(self.params_loss_train)
+        #self.log_loss_train.register(self.params_loss_train)
 
         # logging testing 
-        self.log_loss_test = plugins.Logger(args.logs, 'TestLogger.txt')
+        #self.log_loss_test = plugins.Logger(args.logs, 'TestLogger.txt')
         self.params_loss_test = ['Loss','Accuracy']
-        self.log_loss_test.register(self.params_loss_test)
+        #self.log_loss_test.register(self.params_loss_test)
 
         # monitor training
         self.monitor_train = plugins.Monitor()
@@ -74,24 +75,24 @@ class Trainer():
         self.monitor_test.register(self.params_monitor_test)
 
         # visualize training
-        self.visualizer_train = plugins.Visualizer(self.port, 'Train')
-        self.params_visualizer_train = {
-        'Loss':{'dtype':'scalar','vtype':'plot'},
-        'Accuracy':{'dtype':'scalar','vtype':'plot'},
-        'Image':{'dtype':'image','vtype':'image'},
-        'Images':{'dtype':'images','vtype':'images'},
-        }
-        self.visualizer_train.register(self.params_visualizer_train)
+        #self.visualizer_train = plugins.Visualizer(self.port, 'Train')
+        #self.params_visualizer_train = {
+        #'Loss':{'dtype':'scalar','vtype':'plot'},
+        #'Accuracy':{'dtype':'scalar','vtype':'plot'},
+        #'Image':{'dtype':'image','vtype':'image'},
+        #'Images':{'dtype':'images','vtype':'images'},
+        #}
+        #self.visualizer_train.register(self.params_visualizer_train)
 
         # visualize testing
-        self.visualizer_test = plugins.Visualizer(self.port, 'Test')
-        self.params_visualizer_test = {
-        'Loss':{'dtype':'scalar','vtype':'plot'},
-        'Accuracy':{'dtype':'scalar','vtype':'plot'},
-        'Image':{'dtype':'image','vtype':'image'},
-        'Images':{'dtype':'images','vtype':'images'},
-        }
-        self.visualizer_test.register(self.params_visualizer_test)
+        #self.visualizer_test = plugins.Visualizer(self.port, 'Test')
+        #self.params_visualizer_test = {
+        #'Loss':{'dtype':'scalar','vtype':'plot'},
+        #'Accuracy':{'dtype':'scalar','vtype':'plot'},
+        #'Image':{'dtype':'image','vtype':'image'},
+        #'Images':{'dtype':'images','vtype':'images'},
+        #}
+        #self.visualizer_test.register(self.params_visualizer_test)
 
         # display training progress
         self.print_train = '[%d/%d][%d/%d] '
@@ -132,7 +133,7 @@ class Trainer():
         self.model.train()
         
     def train(self, epoch, dataloader):
-        self.monitor_train.reset()
+        #self.monitor_train.reset()
         data_iter = iter(dataloader)
 
         self.input.volatile = False
@@ -173,14 +174,14 @@ class Trainer():
             print(self.print_train % tuple([epoch, self.nepochs, i, len(dataloader)] + [self.losses_train[key] for key in self.params_monitor_train]))
         
         loss = self.monitor_train.getvalues()
-        self.log_loss_train.update(loss)
+        #self.log_loss_train.update(loss)
         loss['Image'] = input[0]
         loss['Images'] = input
-        self.visualizer_train.update(loss)
+        #self.visualizer_train.update(loss)
         return self.monitor_train.getvalues('Loss')
 
     def test(self, epoch, dataloader):
-        self.monitor_test.reset()
+        #self.monitor_test.reset()
         data_iter = iter(dataloader)
 
         self.input.volatile = True
@@ -216,8 +217,9 @@ class Trainer():
             print(self.print_test % tuple([epoch, self.nepochs, i, len(dataloader)] + [self.losses_test[key] for key in self.params_monitor_test]))
 
         loss = self.monitor_test.getvalues()
-        self.log_loss_test.update(loss)
+        #self.log_loss_test.update(loss)
         loss['Image'] = input[0]
         loss['Images'] = input
-        self.visualizer_test.update(loss)
+        #self.visualizer_test.update(loss)
+        torch.cuda.empty_cache()
         return self.monitor_test.getvalues('Loss')

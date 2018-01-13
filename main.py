@@ -32,7 +32,7 @@ trainer = Trainer(args, model, criterion)
 
 # start training !!!
 loss_best = 1e10
-for epoch in range(args.nepochs):
+for epoch in range(args.nepochs+1):
 
     # train for a single epoch
     loss_train = trainer.train(epoch, loader_train)
