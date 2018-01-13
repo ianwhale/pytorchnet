@@ -99,3 +99,5 @@ ENV/
 /results
 
 output.txt
+
+/.idea
