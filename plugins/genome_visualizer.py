@@ -18,7 +18,7 @@ def subscript(number):
     return number.translate(sub)
 
 
-def make_dot_genome(genome, rankdir="UD", format="pdf", title=None):
+def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="genome"):
     """
     Graphviz representation of network created by genome.
     :param genome: list of lists.
@@ -76,7 +76,7 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None):
                      fontsize='12',
                      ranksep='0.1',
                      height='0.2')
-    dot = Digraph(format=format, filename='genome.gv', node_attr=node_attr, graph_attr=dict(size="12,12"))
+    dot = Digraph(format=format, filename=filename+'.gv', node_attr=node_attr, graph_attr=dict(size="12,12"))
     dot.attr(rankdir=rankdir)
 
     if title:
@@ -140,7 +140,7 @@ def demo():
         ]
     ]
 
-    d = make_dot_genome(genome, title="Demo Genome")
+    d = make_dot_genome(genome, title="Demo Genome", filename="test")
     d.view()
 
 
