@@ -99,7 +99,5 @@ ENV/
 /results
 output.txt
 /.idea
-*.pkl
-*.pdf
 *.gv
 /post
