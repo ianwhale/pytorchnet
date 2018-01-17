@@ -27,6 +27,12 @@ def make_network_title(individual, generation, nsga_details=True):
         title += "\nRank: " + str(individual.rank) \
             + "\nCrowding Distance: " + str(individual.crowding_dist)
 
+    genome_str = ""
+    for gene in individual.genome:
+        genome_str += "-".join(["".join([str(int(i)) for i in node]) for node in gene]) + " "
+
+    title += "\n" + genome_str
+
     return title
 
 
@@ -111,5 +117,5 @@ if __name__ == "__main__":
     archive = [pickle.load(open("gen0.pkl", "rb"))]
 
     for generation, population in enumerate(archive):
-        render_networks(archive, generation)
-        make_plots(archive, generation)
+        render_networks(population, generation)
+        make_plots(population, generation)
