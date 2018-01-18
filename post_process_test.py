@@ -81,7 +81,6 @@ def make_plots(population, generation):
         path = os.path.join(output_dir, label + "_violin")
         raise NotImplementedError("Haven't done this yet.")
 
-
     else:
         # Two objectives, make a scatter plot.
         path = os.path.join(output_dir, label + "_objectives")
@@ -109,7 +108,12 @@ def make_plots(population, generation):
         ax.set_xlabel("Accuracy")
         ax.set_ylabel("Complexity")
         plt.draw()
-        fig.savefig(fname=path)
+
+        try:
+            fig.savefig(fname=path)
+
+        except TypeError:
+            fig.savefig(filename=path)
 
 
 if __name__ == "__main__":
