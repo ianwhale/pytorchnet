@@ -102,11 +102,11 @@ def make_plots(population, generation):
 
         fig, ax = plt.subplots()
         fig.suptitle("Generation {} Objectives".format(generation), fontsize=14, fontweight="bold")
-        ax.plot(non_dom_1, non_dom_2, 'kd')
-        ax.plot(dom_1, dom_2, 'ko')
+        ax.plot(non_dom_2, non_dom_1, 'rd')
+        ax.plot(dom_2, dom_1, 'ko')
         ax.plot()
-        ax.set_xlabel("Accuracy")
-        ax.set_ylabel("Complexity")
+        ax.set_xlabel("Complexity")
+        ax.set_ylabel("Accuracy")
         plt.draw()
 
         try:
