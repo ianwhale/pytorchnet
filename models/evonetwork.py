@@ -175,7 +175,7 @@ class EvoNetwork(nn.Module):
         self.model = nn.Sequential(*layers)
 
         # Do a test forward pass to determine the output shape of the evolved part of the network.
-        shape = self.model(torch.autograd.Variable(torch.zeros(1, 1, *data_shape))).data.shape
+        shape = self.model(torch.autograd.Variable(torch.zeros(1, channels[0][0], *data_shape))).data.shape
 
         self.linear = nn.Linear(shape[1] * shape[2] * shape[3], out_features)
 
@@ -204,13 +204,14 @@ def demo():
     ]]
 
     # One input channel, 8 output channels.
-    channels = [(1, 8)]
+    channels = [(3, 8)]
 
     out_features = 1
-    data = torch.randn(3, 1, 32, 32)
+    data = torch.randn(3, 3, 32, 32)
     net = EvoNetwork(genome, channels, out_features, (32, 32))
 
     print(net(torch.autograd.Variable(data)))
+
 
 if __name__ == "__main__":
     demo()
