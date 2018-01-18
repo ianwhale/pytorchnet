@@ -1,16 +1,16 @@
 import os
 import pickle
 import matplotlib.pyplot as plt
-from pprint import PrettyPrinter
 from plugins.genome_visualizer import make_dot_genome
 
 
-def make_network_title(individual, generation, nsga_details=True):
+def make_network_title(individual, generation, nsga_details=True, show_genome=False):
     """
     Make the title based off properties of the individual.
     :param individual: nsgaII individual
     :param generation: int
-    :param nsga_details: bool, true if we want rank and crowding distance.
+    :param nsga_details: bool, true if we want rank and crowding distance in the title.
+    :param show_genome: bool, true if we want to show the genome in the title.
     :return: str
     """
     accuracy = -individual.fitness[0]
@@ -27,22 +27,21 @@ def make_network_title(individual, generation, nsga_details=True):
         title += "\nRank: " + str(individual.rank) \
             + "\nCrowding Distance: " + str(individual.crowding_dist)
 
-    genome_str = ""
-    for gene in individual.genome:
-        genome_str += "-".join(["".join([str(int(i)) for i in node]) for node in gene]) + " "
-
-    title += "\n" + genome_str
+    if show_genome:
+        genome_str = ""
+        for gene in individual.genome:
+            genome_str += "-".join(["".join([str(int(i)) for i in node]) for node in gene]) + " "
+        title += "\n" + " || ".join(genome_str.strip().split(" "))
 
     return title
 
 
-printer = PrettyPrinter(indent=4)
-
-
-def render_networks(population, generation):
+def render_networks(population, generation, nsga_details=True, show_genome=False):
     """
     Renders the graphviz and image files of network architecture defined by a genome.
     :param population: list of nsga individuals.
+    :param nsga_details: bool, true if we want rank and crowding distance in the title.
+    :param show_genome: bool, true if we want the genome in the title.
     """
     base = "post"
     label = "gen_" + str(generation)
@@ -53,7 +52,7 @@ def render_networks(population, generation):
         filename = label + "_addr_" + str(individual.address)
         path = os.path.join(output_dir, filename)
 
-        title = make_network_title(individual, generation)
+        title = make_network_title(individual, generation, nsga_details=nsga_details, show_genome=show_genome)
 
         viz = make_dot_genome(individual.genome, title=title)
         viz.render(path, view=False)
@@ -117,5 +116,5 @@ if __name__ == "__main__":
     archive = [pickle.load(open("gen0.pkl", "rb"))]
 
     for generation, population in enumerate(archive):
-        render_networks(population, generation)
+        render_networks(population, generation, show_genome=True)
         make_plots(population, generation)
