@@ -96,9 +96,10 @@ ENV/
 # mkdocs documentation
 /site
 
-/results
 output.txt
 /.idea
 *.gv
 /post
 *.pdf
+# results folder
+results/

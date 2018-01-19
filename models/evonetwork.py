@@ -53,6 +53,9 @@ class Phase(nn.Module):
         # This is used to make the input the correct number of channels.
         # TODO: Consider making this not require gradients and always have kernel = 1
         self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
+        self.conv1x1.requires_gradients = False
+        print(self.conv1x1.weight)
+        print(self.conv1x1.bias)
 
         # Gene describes connections between nodes, so we need as many nodes as there are descriptors.
         self.nodes = [Node(out_channels, out_channels) for _ in range(len(gene) + 1)]
