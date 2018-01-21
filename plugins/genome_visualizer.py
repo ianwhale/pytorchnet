@@ -45,7 +45,7 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
         residual = gene[-1][0] == 1
 
         all_zeros = True
-        for dependency in gene:
+        for dependency in gene[:-1]:
             if sum(dependency) > 0:
                 all_zeros = False
                 break
@@ -66,7 +66,8 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
                 "nodes": nodes,
                 "edges": edges,
                 "pool": pool,
-                "phase": phase
+                "phase": phase,
+                "all_zeros": all_zeros
             }
         )
 
@@ -90,6 +91,7 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
         edges = struct['edges']
         phase = struct['phase']
         pool = struct['pool']
+        all_zeros = struct['all_zeros']
 
         # Add nodes.
         dot.node(nodes[0][0], nodes[0][1], fillcolor=node_color)
@@ -97,11 +99,12 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
         if j > 0:
             dot.edge(structure[j - 1]['pool'][0], nodes[0][0])
 
-        with dot.subgraph(name=phase[0]) as p:
-            p.attr(fillcolor=phase_background_color, label=phase[1], fontcolor="black", style="filled")
+        if not all_zeros:
+            with dot.subgraph(name=phase[0]) as p:
+                p.attr(fillcolor=phase_background_color, label=phase[1], fontcolor="black", style="filled")
 
-            for i in range(1, len(nodes) - 1):
-                p.node(nodes[i][0], nodes[i][1], fillcolor=node_color)
+                for i in range(1, len(nodes) - 1):
+                    p.node(nodes[i][0], nodes[i][1], fillcolor=node_color)
 
         dot.node(nodes[-1][0], nodes[-1][1], fillcolor=node_color)
         dot.node(*pool, fillcolor=pool_color)
@@ -132,11 +135,17 @@ def demo():
             [1]
         ],
         [
-            [1],
+            [0],
             [0, 1],
-            [1, 1, 0],
-            [1, 0, 1, 0],
+            [0, 1, 0],
+            [0, 0, 1, 0],
             [0]
+        ],
+        [
+            [0],
+            [0, 0],
+            [0, 0, 0],
+            [1]
         ]
     ]
 

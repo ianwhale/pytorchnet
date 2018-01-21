@@ -63,7 +63,7 @@ class Phase(nn.Module):
         self.dependency_graph = Phase.build_dependency_graph(gene)
 
         all_zeros = True
-        for dependency in gene:
+        for dependency in gene[:-1]:
             if sum(dependency) > 0:
                 all_zeros = False
                 break
