@@ -169,11 +169,12 @@ class EvoNetwork(nn.Module):
         layers = []
         for i, gene, channel_tup in enumerate(zip(genome[:-1], channels[:-1])):
             # TODO: Channel size repair when the genome is all zeros.
-            if i != 0 and sum([sum(t) for t in gene]) == 0:
+            # For now, channel size is fixed so this is not a problem.
+            if i != 0 and sum([sum(t) for t in gene[:-1]]) == 0:
                 continue  # Skip this phase completely is the gene is all zeros.
 
             layers.append(Phase(gene, channel_tup[0], channel_tup[1]))
-            layers.append(nn.MaxPool2d(kernel_size=2, stride=2))  # Reduce dimension by half. TODO: Generalize this.
+            layers.append(nn.MaxPool2d(kernel_size=2, stride=2))  # Reduce dimension by half. TODO: Generalize?
 
         layers.append(Phase(genome[-1], *channels[-1]))
         layers.append(nn.AvgPool2d(kernel_size=2, stride=2))  # Final pooling is average.
@@ -218,7 +219,7 @@ def demo():
     net = EvoNetwork(genome, channels, out_features, (32, 32))
 
     print(net(torch.autograd.Variable(data)))
-
+    print(net)
 
 if __name__ == "__main__":
     demo()
