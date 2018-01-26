@@ -51,14 +51,10 @@ class Phase(nn.Module):
         super(Phase, self).__init__()
 
         # This is used to make the input the correct number of channels.
-        # TODO: Consider making this not require gradients and always have kernel = 1
         self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
-        self.conv1x1.requires_gradients = False
-        print(self.conv1x1.weight)
-        print(self.conv1x1.bias)
 
         # Gene describes connections between nodes, so we need as many nodes as there are descriptors.
-        self.nodes = [Node(out_channels, out_channels) for _ in range(len(gene) + 1)]
+        self.nodes = [Node(out_channels, out_channels) for _ in range(len(gene))]
 
         self.dependency_graph = Phase.build_dependency_graph(gene)
 
@@ -131,14 +127,14 @@ class Phase(nn.Module):
 
         outputs = [self.conv1x1(x)]
 
-        for i in range(1, len(self.nodes)):
+        for i in range(1, len(self.nodes) + 1):
             if not self.dependency_graph[i]:  # Empty list.
                 outputs.append(None)
 
             else:
-                outputs.append(self.nodes[i](self.sum_dependencies(i, outputs)))
+                outputs.append(self.nodes[i - 1](self.sum_dependencies(i, outputs)))
 
-        return self.sum_dependencies(len(self.nodes), outputs)
+        return self.sum_dependencies(len(self.nodes) + 1, outputs)
 
     def sum_dependencies(self, i, outputs):
         """
@@ -171,14 +167,22 @@ class EvoNetwork(nn.Module):
         self.data_shape = data_shape
 
         layers = []
-        for gene, channel_tup in zip(genome, channels):
+        for i, gene, channel_tup in enumerate(zip(genome[:-1], channels[:-1])):
+            # TODO: Channel size repair when the genome is all zeros.
+            if i != 0 and sum([sum(t) for t in gene]) == 0:
+                continue  # Skip this phase completely is the gene is all zeros.
+
             layers.append(Phase(gene, channel_tup[0], channel_tup[1]))
             layers.append(nn.MaxPool2d(kernel_size=2, stride=2))  # Reduce dimension by half. TODO: Generalize this.
 
+        layers.append(Phase(genome[-1], *channels[-1]))
+        layers.append(nn.AvgPool2d(kernel_size=2, stride=2))  # Final pooling is average.
+
         self.model = nn.Sequential(*layers)
 
-        # Do a test forward pass to determine the output shape of the evolved part of the network.
+        # Do a test forward pass on model to determine the output shape of the evolved part of the network.
         shape = self.model(torch.autograd.Variable(torch.zeros(1, channels[0][0], *data_shape))).data.shape
+        self.model.zero_grad()
 
         self.linear = nn.Linear(shape[1] * shape[2] * shape[3], out_features)
 
