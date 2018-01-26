@@ -58,13 +58,7 @@ class Phase(nn.Module):
 
         self.dependency_graph = Phase.build_dependency_graph(gene)
 
-        all_zeros = True
-        for dependency in gene[:-1]:
-            if sum(dependency) > 0:
-                all_zeros = False
-                break
-
-        self.all_zeros = all_zeros
+        self.all_zeros = sum([sum(t) for t in gene[:-1]]) == 0
         self.residual = gene[-1][0] == 1
         self.nodes = nn.ModuleList(self.nodes)
 
@@ -220,6 +214,7 @@ def demo():
 
     print(net(torch.autograd.Variable(data)))
     print(net)
+
 
 if __name__ == "__main__":
     demo()
