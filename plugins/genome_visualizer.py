@@ -42,6 +42,7 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
 
         pool = (prefix + "_pool", "Pooling")
 
+
         edges = []
         graph = Phase.build_dependency_graph(gene)
 
@@ -59,6 +60,10 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
                 "graph": graph
             }
         )
+
+    final_pool = structure[-1]["pool"]
+    new_pool = (final_pool[0], "Avg. Pooling")
+    structure[-1]["pool"] = new_pool
 
     node_attr = dict(style='filled',
                      shape='box',
