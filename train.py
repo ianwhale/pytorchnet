@@ -17,7 +17,6 @@ class Trainer():
         self.dir_save = args.save
 
         self.cuda = args.cuda
-        self.ngpu = args.ngpu
         self.nepochs = args.nepochs
         self.nchannels = args.nchannels
         self.batch_size = args.batch_size
@@ -61,9 +60,9 @@ class Trainer():
         self.label = Variable(self.label)
 
         # logging training
-        self.log_loss_train = plugins.Logger(args.logs, 'TrainLogger.txt')
+        #self.log_loss_train = plugins.Logger(args.logs, 'TrainLogger.txt')
         self.params_loss_train = ['Loss', 'Accuracy']
-        self.log_loss_train.register(self.params_loss_train)
+        #self.log_loss_train.register(self.params_loss_train)
 
         # monitor training
         self.monitor_train = plugins.Monitor()
@@ -71,14 +70,14 @@ class Trainer():
         self.monitor_train.register(self.params_monitor_train)
 
         # visualize training
-        self.visualizer_train = plugins.Visualizer(self.port, 'Train')
-        self.params_visualizer_train = {
-            'Loss': {'dtype': 'scalar', 'vtype': 'plot'},
-            'Accuracy': {'dtype': 'scalar', 'vtype': 'plot'},
-            'Image': {'dtype': 'image', 'vtype': 'image'},
-            'Images': {'dtype': 'images', 'vtype': 'images'},
-        }
-        self.visualizer_train.register(self.params_visualizer_train)
+        # self.visualizer_train = plugins.Visualizer(self.port, 'Train')
+        # self.params_visualizer_train = {
+        #     'Loss': {'dtype': 'scalar', 'vtype': 'plot'},
+        #     'Accuracy': {'dtype': 'scalar', 'vtype': 'plot'},
+        #     'Image': {'dtype': 'image', 'vtype': 'image'},
+        #     'Images': {'dtype': 'images', 'vtype': 'images'},
+        # }
+        # self.visualizer_train.register(self.params_visualizer_train)
 
         # display training progress
         self.print_train = 'Train [%d/%d][%d/%d] '
@@ -87,7 +86,7 @@ class Trainer():
 
         self.evalmodules = []
         self.losses_train = {}
-        print(self.model)
+        # print(self.model)
 
     def learning_rate(self, epoch):
         # training schedule
@@ -143,14 +142,14 @@ class Trainer():
             self.losses_train['Loss'] = loss.data[0]
             self.monitor_train.update(self.losses_train, batch_size)
 
-            # print batch progress
-            print(self.print_train % tuple(
-                [epoch, self.nepochs, i, len(dataloader)] +
-                [self.losses_train[key] for key in self.params_monitor_train]))
+        # print batch progress
+        print(self.print_train % tuple(
+            [epoch, self.nepochs, i, len(dataloader)] +
+            [self.losses_train[key] for key in self.params_monitor_train]))
 
         loss = self.monitor_train.getvalues()
-        #self.log_loss_train.update(loss)
+        # self.log_loss_train.update(loss)
         loss['Image'] = input[0]
         loss['Images'] = input
-        #self.visualizer_train.update(loss)
+        # self.visualizer_train.update(loss)
         return self.monitor_train.getvalues('Loss')

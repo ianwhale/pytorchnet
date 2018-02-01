@@ -49,6 +49,14 @@ class Individual:
         # GPU_id number for evaluating this individual
         self.gpu_id = 0
 
+class MetaStatistics:
+    def __init__(self):
+        self.best_accu = 0
+        self.median_accu = 0
+        self.worst_accu = 0
+        self.offspring_survival_rate = 0
+        self.archive_size = 0
+
 class Constants:
     def __init__(self):
         self.EPS = 1.0e-14

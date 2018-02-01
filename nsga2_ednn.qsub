@@ -1,0 +1,9 @@
+#!/bin/bash -login
+#PBS -l walltime=5:00:00:00,nodes=1:ppn=1,mem=16gb
+#PBS -N nsga2_CIFAR10
+#PBS -o /mnt/research/coin_lab/Deep_learning/zhichao/multi_qsub_experiment/CIFAR10/pytorchnet
+#PBS -j oe
+
+cd ${PBS_O_WORKDIR}
+
+python nsga2_main_qsub.py > progress.txt

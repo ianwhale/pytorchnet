@@ -3,6 +3,7 @@
 import math
 import models
 import losses
+import pickle
 from torch import nn
 
 
@@ -24,29 +25,37 @@ class Model:
         self.nfilters = args.nfilters
         self.nchannels = args.nchannels
         self.net_type = args.net_type
+        self.genome_id = args.genome_id
+        self.resolution_high = args.resolution_high
+        self.resolution_wide = args.resolution_wide
 
-    def setup(self, checkpoints):
-        model = getattr(models, self.net_type)(
-            nchannels=self.nchannels,
-            nfilters=self.nfilters,
-            nclasses=self.nclasses,
-        )
+    def setup(self):
+
+        with open("input_file/input%d.pkl" % int(self.genome_id - 1), "rb") as f:
+            genome = pickle.load(f)
+
+        # model = getattr(models, self.net_type)(
+        #     nchannels=self.nchannels,
+        #     nfilters=self.nfilters,
+        #     nclasses=self.nclasses,
+        # )
+        model = models.evonetwork.EvoNetwork(genome,
+                                             [(self.nchannels, self.nfilters)],
+                                             self.nclasses,(self.resolution_high,
+                                                            self.resolution_wide))
         criterion = losses.Classification()
-
-        if self.cuda:
-            model = nn.DataParallel(model,device_ids=list(range(self.ngpu)))
-            model = model.cuda()
-            criterion = criterion.cuda()
 
         if self.cuda:
             model = nn.DataParallel(model, device_ids=list(range(self.ngpu)))
             model = model.cuda()
             criterion = criterion.cuda()
 
-        if checkpoints.latest('resume') is None:
-            model.apply(weights_init)
-        else:
-            tmp = checkpoints.load(checkpoints['resume'])
-            model.load_state_dict(tmp)
+        model.apply(weights_init)
+
+        # if checkpoints.latest('resume') is None:
+        #     model.apply(weights_init)
+        # else:
+        #     tmp = checkpoints.load(checkpoints['resume'])
+        #     model.load_state_dict(tmp)
 
         return model, criterion

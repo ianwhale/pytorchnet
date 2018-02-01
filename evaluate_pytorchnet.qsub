@@ -1,0 +1,28 @@
+#!/bin/bash -login
+#PBS -l walltime=04:00:00,nodes=1:ppn=1:gpus=1,mem=16gb
+#PBS -l feature='gpgpu:intel16'
+#PBS -A beacon
+#PBS -N eval_CIFAR10
+#PBS -o /mnt/research/coin_lab/Deep_learning/zhichao/multi_qsub_experiment/CIFAR10/pytorchnet/hpcc_output
+#PBS -j oe
+#PBS -t 1-20
+
+n=${PBS_ARRAYID}
+
+cd ${PBS_O_WORKDIR} 
+
+gpu=$CUDA_VISIBLE_DEVICES
+IFS=',' read -r -a array <<< "$gpu"
+TARGET="No running processes"
+for element in "${array[@]}"
+do
+    status="$(nvidia-smi -i "$element")"
+    if echo "$status" | grep -q "$TARGET"; then
+        CUDA_VISIBLE_DEVICES="$element"
+        echo $CUDA_VISIBLE_DEVICES
+        python main.py --genome_id $n --nepochs 100
+        exit 0
+    fi
+done
+
+python report_error_evaluation.py --genome_id $n
