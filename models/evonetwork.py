@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from models.model_utils import count_trainable_parameters
 
 
 class Node(nn.Module):
@@ -157,11 +158,13 @@ class EvoNetwork(nn.Module):
         """
         super(EvoNetwork, self).__init__()
 
+        assert len(channels) == len(genome), "Need to supply as many channel tuples as genes."
+
         self.channels = channels
         self.data_shape = data_shape
 
         layers = []
-        for i, gene, channel_tup in enumerate(zip(genome[:-1], channels[:-1])):
+        for i, (gene, channel_tup) in enumerate(zip(genome[:-1], channels[:-1])):
             # TODO: Channel size repair when the genome is all zeros.
             # For now, channel size is fixed so this is not a problem.
             if i != 0 and sum([sum(t) for t in gene[:-1]]) == 0:
@@ -198,15 +201,23 @@ def demo():
     Demo creating a single phase network.
     """
     # Genome should be a list of genes describing phase connection schemes.
-    genome = [[
-        [1],        # A_2 connections.
-        [0, 0],     # A_3 connections.
-        [1, 1, 1],  # A_4 connections.
-        [1]         # A_5 connections (do we connect to A_0?)
-    ]]
-
+    # genome = [
+    #     [
+    #         [1],
+    #         [0, 0],
+    #         [1, 1, 1],
+    #         [1]
+    #     ],
+    #     [
+    #         [1],
+    #         [0, 0],
+    #         [1, 1, 1],
+    #         [1]
+    #     ]
+    # ]
+    genome = [[[0], [0, 0], [0, 0, 0], [1]], [[0], [0, 1], [0, 0, 0], [1]], [[0], [0, 0], [0, 0, 0], [0]]]
     # One input channel, 8 output channels.
-    channels = [(3, 8)]
+    channels = [(3, 8), (8, 8), (8, 8)]
 
     out_features = 1
     data = torch.randn(3, 3, 32, 32)
@@ -214,6 +225,7 @@ def demo():
 
     print(net(torch.autograd.Variable(data)))
     print(net)
+    print("Trainable parameters: {}".format(count_trainable_parameters(net)))
 
 
 if __name__ == "__main__":
