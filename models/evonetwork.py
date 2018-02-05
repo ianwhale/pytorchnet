@@ -43,22 +43,29 @@ class Phase(nn.Module):
     Represents a computation unit.
     Made up of Nodes.
     """
-    def __init__(self, gene, in_channels, out_channels):
+    def __init__(self, gene, in_channels, out_channels, idx):
         """
         Constructor.
-        :param gene: element of genome describing this phase.
-                     It is assumed that the gene maps to a viable phase structure.
+        :param gene: list, element of genome describing this phase.
+        :param in_channels: int, number of input channels.
+        :param out_channels: int, number of desired output channels.
+        :param idx: int, index of the phase.
         """
         super(Phase, self).__init__()
 
         # This is used to make the input the correct number of channels.
-        self.conv1x1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
+        if idx == 0:  # First phase should not do a 1x1 convolution.
+            self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1)
+
+        else:
+            self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
 
         # Gene describes connections between nodes, so we need as many nodes as there are descriptors.
         self.nodes = [Node(out_channels, out_channels) for _ in range(len(gene))]
 
         self.dependency_graph = Phase.build_dependency_graph(gene)
 
+        self.channel_flag = idx == 0 or in_channels != out_channels  # Do we need to change the number of channels?
         self.all_zeros = sum([sum(t) for t in gene[:-1]]) == 0
         self.residual = gene[-1][0] == 1
         self.nodes = nn.ModuleList(self.nodes)
@@ -117,10 +124,13 @@ class Phase(nn.Module):
         :param x: Variable, input.
         :return: Variable.
         """
-        if self.all_zeros:
-            return self.conv1x1(x)
+        if self.channel_flag:
+            x = self.first_conv(x)
 
-        outputs = [self.conv1x1(x)]
+        if self.all_zeros:
+            return x
+
+        outputs = [x]
 
         for i in range(1, len(self.nodes) + 1):
             if not self.dependency_graph[i]:  # Empty list.
@@ -160,26 +170,37 @@ class EvoNetwork(nn.Module):
 
         assert len(channels) == len(genome), "Need to supply as many channel tuples as genes."
 
-        self.channels = channels
-        self.data_shape = data_shape
+        adjusted_genome = []  # Remove all inactive phases.
+
+        for gene in genome:
+            if sum([sum(t) for t in gene[:-1]]) != 0:
+                adjusted_genome.append(gene)
+
+        # TODO: Think about channels more deeply (implement D.O.N. genome).
+        adjusted_channels = channels[:len(adjusted_genome)]  # Remove unnecessary channels at the end.
 
         layers = []
-        for i, (gene, channel_tup) in enumerate(zip(genome[:-1], channels[:-1])):
-            # TODO: Channel size repair when the genome is all zeros.
-            # For now, channel size is fixed so this is not a problem.
-            if i != 0 and sum([sum(t) for t in gene[:-1]]) == 0:
-                continue  # Skip this phase completely is the gene is all zeros.
-
-            layers.append(Phase(gene, channel_tup[0], channel_tup[1]))
+        active_phases = 0
+        for i, (gene, channel_tup) in enumerate(zip(adjusted_genome[:-1], adjusted_channels[:-1])):
+            layers.append(Phase(gene, *channel_tup, i))
             layers.append(nn.MaxPool2d(kernel_size=2, stride=2))  # Reduce dimension by half. TODO: Generalize?
 
-        layers.append(Phase(genome[-1], *channels[-1]))
-        layers.append(nn.AvgPool2d(kernel_size=2, stride=2))  # Final pooling is average.
+            active_phases += 1
+
+        layers.append(Phase(adjusted_genome[-1], *adjusted_channels[-1], active_phases))
 
         self.model = nn.Sequential(*layers)
 
         # Do a test forward pass on model to determine the output shape of the evolved part of the network.
-        shape = self.model(torch.autograd.Variable(torch.zeros(1, channels[0][0], *data_shape))).data.shape
+        shape = self.model(torch.autograd.Variable(torch.zeros(1, adjusted_channels[0][0], *data_shape))).data.shape
+        self.model.zero_grad()
+
+        layers.append(nn.AvgPool2d(kernel_size=shape[-1], stride=2))  # Final pooling is average.
+
+        self.model = nn.Sequential(*layers)
+
+        # Do a test forward pass on model to determine the shape after pooling.
+        shape = self.model(torch.autograd.Variable(torch.zeros(1, adjusted_channels[0][0], *data_shape))).data.shape
         self.model.zero_grad()
 
         self.linear = nn.Linear(shape[1] * shape[2] * shape[3], out_features)
@@ -201,31 +222,36 @@ def demo():
     Demo creating a single phase network.
     """
     # Genome should be a list of genes describing phase connection schemes.
-    # genome = [
-    #     [
-    #         [1],
-    #         [0, 0],
-    #         [1, 1, 1],
-    #         [1]
-    #     ],
-    #     [
-    #         [1],
-    #         [0, 0],
-    #         [1, 1, 1],
-    #         [1]
-    #     ]
-    # ]
-    genome = [[[0], [0, 0], [0, 0, 0], [1]], [[0], [0, 1], [0, 0, 0], [1]], [[0], [0, 0], [0, 0, 0], [0]]]
-    # One input channel, 8 output channels.
+    genome = [
+        [
+            [1],
+            [0, 0],
+            [1, 1, 1],
+            [1]
+        ],
+        [  # Phase will be ignored, there are no active connections (residual is not counted as active).
+            [0],
+            [0, 0],
+            [0, 0, 0],
+            [1]
+        ],
+        [
+            [1],
+            [0, 0],
+            [1, 1, 1],
+            [0, 0, 1, 0],
+            [1]
+        ]
+    ]
+
     channels = [(3, 8), (8, 8), (8, 8)]
 
-    out_features = 1
-    data = torch.randn(3, 3, 32, 32)
+    out_features = 10
+    data = torch.randn(16, 3, 32, 32)
     net = EvoNetwork(genome, channels, out_features, (32, 32))
 
     print(net(torch.autograd.Variable(data)))
-    print(net)
-    print("Trainable parameters: {}".format(count_trainable_parameters(net)))
+    # print("Trainable parameters: {}".format(count_trainable_parameters(net)))
 
 
 if __name__ == "__main__":
