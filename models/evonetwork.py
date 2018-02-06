@@ -232,30 +232,29 @@ def demo():
     Demo creating a single phase network.
     """
     # Genome should be a list of genes describing phase connection schemes.
-    # genome = [
-    #     [
-    #         [1],
-    #         [0, 0],
-    #         [1, 1, 1],
-    #         [1]
-    #     ],
-    #     [  # Phase will be ignored, there are no active connections (residual is not counted as active).
-    #         [0],
-    #         [0, 0],
-    #         [0, 0, 0],
-    #         [1]
-    #     ],
-    #     [
-    #         [1],
-    #         [0, 0],
-    #         [1, 1, 1],
-    #         [0, 0, 1, 0],
-    #         [1]
-    #     ]
-    # ]
-    genome = [[[0], [0, 0], [0, 0, 0], [0]]]
+    genome = [
+        [
+            [1],
+            [0, 0],
+            [1, 1, 1],
+            [1]
+        ],
+        [  # Phase will be ignored, there are no active connections (residual is not counted as active).
+            [0],
+            [0, 0],
+            [0, 0, 0],
+            [1]
+        ],
+        [
+            [1],
+            [0, 0],
+            [1, 1, 1],
+            [0, 0, 1, 0],
+            [1]
+        ]
+    ]
 
-    channels = [(3, 8)] #,(8, 8), (8, 8)]
+    channels = [(3, 8), (8, 8), (8, 8)]
 
     out_features = 10
     data = torch.randn(16, 3, 32, 32)
