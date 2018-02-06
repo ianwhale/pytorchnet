@@ -179,31 +179,39 @@ class EvoNetwork(nn.Module):
         # TODO: Think about channels more deeply (implement D.O.N. genome).
         adjusted_channels = channels[:len(adjusted_genome)]  # Remove unnecessary channels at the end.
 
-        layers = []
-        active_phases = 0
-        for i, (gene, channel_tup) in enumerate(zip(adjusted_genome[:-1], adjusted_channels[:-1])):
-            layers.append(Phase(gene, *channel_tup, i))
-            layers.append(nn.MaxPool2d(kernel_size=2, stride=2))  # Reduce dimension by half. TODO: Generalize?
+        if len(adjusted_genome) > 0:
+            self.useful = True
 
-            active_phases += 1
+            layers = []
+            active_phases = 0
+            for i, (gene, channel_tup) in enumerate(zip(adjusted_genome[:-1], adjusted_channels[:-1])):
+                layers.append(Phase(gene, *channel_tup, i))
+                layers.append(nn.MaxPool2d(kernel_size=2, stride=2))  # Reduce dimension by half. TODO: Generalize?
 
-        layers.append(Phase(adjusted_genome[-1], *adjusted_channels[-1], active_phases))
+                active_phases += 1
 
-        self.model = nn.Sequential(*layers)
+            layers.append(Phase(adjusted_genome[-1], *adjusted_channels[-1], active_phases))
 
-        # Do a test forward pass on model to determine the output shape of the evolved part of the network.
-        shape = self.model(torch.autograd.Variable(torch.zeros(1, adjusted_channels[0][0], *data_shape))).data.shape
-        self.model.zero_grad()
+            self.model = nn.Sequential(*layers)
 
-        layers.append(nn.AvgPool2d(kernel_size=shape[-1], stride=2))  # Final pooling is average.
+            # Do a test forward pass on model to determine the output shape of the evolved part of the network.
+            shape = self.model(torch.autograd.Variable(torch.zeros(1, adjusted_channels[0][0], *data_shape))).data.shape
+            self.model.zero_grad()
 
-        self.model = nn.Sequential(*layers)
+            layers.append(nn.AvgPool2d(kernel_size=shape[-1], stride=2))  # Final pooling is average.
 
-        # Do a test forward pass on model to determine the shape after pooling.
-        shape = self.model(torch.autograd.Variable(torch.zeros(1, adjusted_channels[0][0], *data_shape))).data.shape
-        self.model.zero_grad()
+            self.model = nn.Sequential(*layers)
 
-        self.linear = nn.Linear(shape[1] * shape[2] * shape[3], out_features)
+            # Do a test forward pass on model to determine the shape after pooling.
+            shape = self.model(torch.autograd.Variable(torch.zeros(1, adjusted_channels[0][0], *data_shape))).data.shape
+            self.model.zero_grad()
+
+            self.linear = nn.Linear(shape[1] * shape[2] * shape[3], out_features)
+
+        else:
+            self.useful = False
+
+            self.linear = nn.Linear(channels[0][0] * data_shape[0] * data_shape[1], out_features)
 
     def forward(self, x):
         """
@@ -211,7 +219,9 @@ class EvoNetwork(nn.Module):
         :param x: Variable, input to network.
         :return: Variable.
         """
-        x = self.model(x)
+        if self.useful:
+            x = self.model(x)
+
         x = x.view(x.size(0), -1)
 
         return self.linear(x)
@@ -222,29 +232,30 @@ def demo():
     Demo creating a single phase network.
     """
     # Genome should be a list of genes describing phase connection schemes.
-    genome = [
-        [
-            [1],
-            [0, 0],
-            [1, 1, 1],
-            [1]
-        ],
-        [  # Phase will be ignored, there are no active connections (residual is not counted as active).
-            [0],
-            [0, 0],
-            [0, 0, 0],
-            [1]
-        ],
-        [
-            [1],
-            [0, 0],
-            [1, 1, 1],
-            [0, 0, 1, 0],
-            [1]
-        ]
-    ]
+    # genome = [
+    #     [
+    #         [1],
+    #         [0, 0],
+    #         [1, 1, 1],
+    #         [1]
+    #     ],
+    #     [  # Phase will be ignored, there are no active connections (residual is not counted as active).
+    #         [0],
+    #         [0, 0],
+    #         [0, 0, 0],
+    #         [1]
+    #     ],
+    #     [
+    #         [1],
+    #         [0, 0],
+    #         [1, 1, 1],
+    #         [0, 0, 1, 0],
+    #         [1]
+    #     ]
+    # ]
+    genome = [[[0], [0, 0], [0, 0, 0], [0]]]
 
-    channels = [(3, 8), (8, 8), (8, 8)]
+    channels = [(3, 8)] #,(8, 8), (8, 8)]
 
     out_features = 10
     data = torch.randn(16, 3, 32, 32)
