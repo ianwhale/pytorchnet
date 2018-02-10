@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-from models.model_utils import count_trainable_parameters
-
+from models.model_utils import ParamCounter
 
 class Node(nn.Module):
     """
@@ -55,10 +54,10 @@ class Phase(nn.Module):
 
         # This is used to make the input the correct number of channels.
         if idx == 0:  # First phase should not do a 1x1 convolution.
-            self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1)
+            self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, bias=False)
 
         else:
-            self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
+            self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, bias=False)
 
         # Gene describes connections between nodes, so we need as many nodes as there are descriptors.
         self.nodes = [Node(out_channels, out_channels) for _ in range(len(gene))]
@@ -260,8 +259,10 @@ def demo():
     data = torch.randn(16, 3, 32, 32)
     net = EvoNetwork(genome, channels, out_features, (32, 32))
 
-    print(net(torch.autograd.Variable(data)))
-    # print("Trainable parameters: {}".format(count_trainable_parameters(net)))
+    output = net(torch.autograd.Variable(data))
+
+    print(output)
+    print("Trainable parameters: {}".format(ParamCounter(output).get_count()))
 
 
 if __name__ == "__main__":
