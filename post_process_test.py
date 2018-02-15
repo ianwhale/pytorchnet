@@ -2,15 +2,17 @@ import os
 import pickle
 import matplotlib.pyplot as plt
 from plugins.genome_visualizer import make_dot_genome
+from models.model_utils import count_trainable_parameters
 
 
-def make_network_title(individual, generation, nsga_details=True, show_genome=False):
+def make_network_title(individual, generation, nsga_details=True, show_genome=False, show_params=True):
     """
     Make the title based off properties of the individual.
     :param individual: nsgaII individual
     :param generation: int
     :param nsga_details: bool, true if we want rank and crowding distance in the title.
     :param show_genome: bool, true if we want to show the genome in the title.
+    :param show_params: bool, true if we want to show total trainable parameters.
     :return: str
     """
     accuracy = -individual.fitness[0]
@@ -36,7 +38,7 @@ def make_network_title(individual, generation, nsga_details=True, show_genome=Fa
     return title
 
 
-def render_networks(population, generation, nsga_details=True, show_genome=False):
+def render_networks(population, generation, nsga_details=True, show_genome=False, show_params=True):
     """
     Renders the graphviz and image files of network architecture defined by a genome.
     :param population: list of nsga individuals.
@@ -52,7 +54,8 @@ def render_networks(population, generation, nsga_details=True, show_genome=False
         filename = label + "_addr_" + str(individual.address)
         path = os.path.join(output_dir, filename)
 
-        title = make_network_title(individual, generation, nsga_details=nsga_details, show_genome=show_genome)
+        title = make_network_title(individual, generation, nsga_details=nsga_details,
+                                   show_genome=show_genome, show_params=show_params)
 
         viz = make_dot_genome(individual.genome, title=title)
         viz.render(path, view=False)

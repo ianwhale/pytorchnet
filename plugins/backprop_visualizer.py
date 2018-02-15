@@ -60,21 +60,20 @@ def make_dot_backprop(var, params=None):
 
 def demo():
     genome = [[
-        [1],        # A_2 connections.
-        [0, 0],     # A_3 connections.
-        [1, 1, 1],  # A_4 connections.
-        [1]         # A_5 connections (do we connect to A_0?)
+        [1],
+        [0, 0],
+        [1, 1, 1],
+        [1]
     ]]
 
-    # One input channel, 8 output channels.
     channels = [(3, 8)]
-
-    out_features = 1
-    data = torch.randn(3, 3, 32, 32)
+    out_features = 10
     net = EvoNetwork(genome, channels, out_features, (32, 32))
-    out = net(Variable(data))
 
-    dot = make_dot_backprop(out)
+    data = torch.randn(256, 3, 32, 32)
+    output = net(Variable(data))
+
+    dot = make_dot_backprop(output)
     dot.view()
 
 
