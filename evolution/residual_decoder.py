@@ -94,16 +94,13 @@ class ResidualGenomePhase(nn.Module):
         # So, we build the 1x1 convolutions that will deal with the depth-wise concatenations.
         #
 
-        conv1x1s = {}
+        conv1x1s = [Identity()] + [Identity() for _ in range(max(self.dependency_graph.keys()))]
         for node_idx, dependencies in self.dependency_graph.items():
-            if len(dependencies) <= 1:
-                conv1x1s[node_idx] = Identity()
-
-            else:
+            if len(dependencies) > 1:
                 conv1x1s[node_idx] = \
                     nn.Conv2d(len(dependencies) * out_channels, out_channels, kernel_size=1, bias=False)
 
-        self.processors = conv1x1s
+        self.processors = nn.ModuleList(conv1x1s)
 
     @staticmethod
     def build_dependency_graph(gene):
