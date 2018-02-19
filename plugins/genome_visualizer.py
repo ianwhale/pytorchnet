@@ -2,10 +2,22 @@
 
 from graphviz import Digraph
 from string import ascii_letters
-from models.evonetwork import Phase
+from evolution.residual_decoder import ResidualGenomePhase
 
 
-def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="genome"):
+def get_graph_function(type):
+    """
+    Get the appropriate function to build a dependency graph.
+    :param type:
+    :return: callable
+    """
+    if type == "residual":
+        return ResidualGenomePhase.build_dependency_graph
+
+    raise NotImplementedError("Genome type {} not supported.".format(type))
+
+
+def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="genome", type="residual"):
     """
     Graphviz representation of network created by genome.
     :param genome: list of lists.
@@ -13,6 +25,7 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
     :param format: output file format, jpg, png, etc.
     :param title: title of graph.
     :param filename: filename of graph.
+    :param type: string, what kind of decoder should we use.
     :return: graphviz dot object.
     """
     node_color = "lightblue"
@@ -44,7 +57,8 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
 
 
         edges = []
-        graph = Phase.build_dependency_graph(gene)
+        graph_function = get_graph_function(type)
+        graph = graph_function(gene)
 
         for sink, dependencies in graph.items():
             for source in dependencies:

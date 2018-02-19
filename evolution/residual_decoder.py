@@ -39,7 +39,7 @@ class ResidualGenomeDecoder(Decoder):
         super().__init__(list_genome)
 
         # First, we remove all inactive phases.
-        self._genome = [gene for gene in list_genome if phase_active(gene)]
+        self._genome = ResidualGenomeDecoder.get_effective_genome(list_genome)
         self._channels = channels[:len(self._genome)]
 
         # If we had no active nodes, our model is just the identity, and we stop constructing.
@@ -62,6 +62,15 @@ class ResidualGenomeDecoder(Decoder):
         layers.append(last_phase)
 
         self._model = nn.Sequential(*layers)
+
+    @staticmethod
+    def get_effective_genome(genome):
+        """
+        Get only the parts of the genome that are active.
+        :param genome: list, represents the genome
+        :return: list
+        """
+        return [gene for gene in genome if phase_active(gene)]
 
     def get_model(self):
         """

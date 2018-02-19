@@ -38,7 +38,7 @@ def make_network_title(individual, generation, nsga_details=True, show_genome=Fa
     return title
 
 
-def render_networks(population, generation, nsga_details=True, show_genome=False, show_params=True):
+def render_networks(population, generation, nsga_details=True, show_genome=False, show_params=True, type="residual"):
     """
     Renders the graphviz and image files of network architecture defined by a genome.
     :param population: list of nsga individuals.
@@ -57,7 +57,7 @@ def render_networks(population, generation, nsga_details=True, show_genome=False
         title = make_network_title(individual, generation, nsga_details=nsga_details,
                                    show_genome=show_genome, show_params=show_params)
 
-        viz = make_dot_genome(individual.genome, title=title)
+        viz = make_dot_genome(individual.genome, title=title, type=type)
         viz.render(path, view=False)
 
 
@@ -123,5 +123,5 @@ if __name__ == "__main__":
     archive = [pickle.load(open("gen0.pkl", "rb"))]
 
     for generation, population in enumerate(archive):
-        render_networks(population, generation, show_genome=True)
+        render_networks(population, generation, show_genome=True, type="residual")
         make_plots(population, generation)
