@@ -6,14 +6,17 @@ from models.model_utils import ParamCounter
 from evolution.residual_decoder import ResidualGenomeDecoder
 
 
-def get_decoder(decoder_str):
+def get_decoder(decoder_str, genome, channels):
     """
     Construct the appropriate decoder.
     :param decoder_str: string, refers to what genome scheme we're using.
     :return: Decoder
     """
     if decoder_str == "residual":
-        return ResidualGenomeDecoder
+        return ResidualGenomeDecoder(genome, channels)
+
+    if decoder_str == "swapped-residual":
+        return ResidualGenomeDecoder(genome, channels, use_swapped=True)
 
     raise NotImplementedError("Decoder {} not implemented.".format(decoder_str))
 
@@ -35,8 +38,7 @@ class EvoNetwork(nn.Module):
 
         assert len(channels) == len(genome), "Need to supply as many channel tuples as genes."
 
-        decoder = get_decoder(decoder)
-        self.model = decoder(genome, channels).get_model()
+        self.model = get_decoder(decoder, genome, channels).get_model()
 
         #
         # After the evolved part of the network, we would like to do global average pooling and a linear layer.

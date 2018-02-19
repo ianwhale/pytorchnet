@@ -30,7 +30,7 @@ class ResidualGenomeDecoder(Decoder):
     """
     Genetic CNN genome decoder with residual bit.
     """
-    def __init__(self, list_genome, channels):
+    def __init__(self, list_genome, channels, use_swapped=False):
         """
         Constructor.
         :param list_genome: list, genome describing the connections in a network.
@@ -50,7 +50,7 @@ class ResidualGenomeDecoder(Decoder):
         # Build up the appropriate number of phases.
         phases = []
         for idx, (gene, (in_channels, out_channels)) in enumerate(zip(self._genome, self._channels)):
-            phases.append(ResidualGenomePhase(gene, in_channels, out_channels, idx))
+            phases.append(ResidualGenomePhase(gene, in_channels, out_channels, idx, use_swapped=use_swapped))
 
         # Combine the phases with pooling where necessary.
         layers = []
@@ -83,7 +83,7 @@ class ResidualGenomePhase(nn.Module):
     """
     Residual Genome phase.
     """
-    def __init__(self, gene, in_channels, out_channels, idx):
+    def __init__(self, gene, in_channels, out_channels, idx, use_swapped=False):
         """
         Constructor.
         :param gene: list, element of genome describing this phase.
@@ -96,7 +96,12 @@ class ResidualGenomePhase(nn.Module):
         self.channel_flag = in_channels != out_channels  # Flag to tell us if we need to increase channel size.
         self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1 if idx != 0 else 3, stride=1, bias=False)
         self.dependency_graph = ResidualGenomePhase.build_dependency_graph(gene)
-        self.nodes = nn.ModuleList([ResidualGenomeNode(out_channels, out_channels) for _ in gene])
+
+        if use_swapped:
+            self.nodes = nn.ModuleList([SwappedResidualGenomeNode(out_channels, out_channels) for _ in gene])
+
+        else:
+            self.nodes = nn.ModuleList([ResidualGenomeNode(out_channels, out_channels) for _ in gene])
 
         #
         # At this point, we know which nodes will be receiving input from where.
@@ -218,6 +223,40 @@ class ResidualGenomeNode(nn.Module):
         """
         return self.model(x)
 
+
+class SwappedResidualGenomeNode(nn.Module):
+    """
+    Basic computation unit.
+    Does batchnorm, relu, and convolution (in this order).
+    """
+    def __init__(self, in_channels, out_channels, stride=1,
+                 kernel_size=3, padding=1, bias=False):
+        """
+        Constructor.
+        Default arguments preserve dimensionality of input.
+
+        :param in_channels: input to the node.
+        :param out_channels: output channels from the node.
+        :param stride: stride of convolution, default 1.
+        :param kernel_size: size of convolution kernel, default 3.
+        :param padding: amount of zero padding, default 1.
+        :param bias: true to use bias, false to not.
+        """
+        super(SwappedResidualGenomeNode, self).__init__()
+
+        self.model = nn.Sequential(
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
+        )
+
+    def forward(self, x):
+        """
+        Apply forward propagation operation.
+        :param x: Variable, input.
+        :return: Variable.
+        """
+        return self.model(x)
 
 def demo():
     from plugins.backprop_visualizer import make_dot_backprop
