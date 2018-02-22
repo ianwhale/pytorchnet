@@ -30,7 +30,7 @@ class ResidualGenomeDecoder(Decoder):
     """
     Genetic CNN genome decoder with residual bit.
     """
-    def __init__(self, list_genome, channels, use_swapped=False):
+    def __init__(self, list_genome, channels, preact=False):
         """
         Constructor.
         :param list_genome: list, genome describing the connections in a network.
@@ -50,7 +50,7 @@ class ResidualGenomeDecoder(Decoder):
         # Build up the appropriate number of phases.
         phases = []
         for idx, (gene, (in_channels, out_channels)) in enumerate(zip(self._genome, self._channels)):
-            phases.append(ResidualGenomePhase(gene, in_channels, out_channels, idx, use_swapped=use_swapped))
+            phases.append(ResidualPhase(gene, in_channels, out_channels, idx, preact=preact))
 
         # Combine the phases with pooling where necessary.
         layers = []
@@ -79,29 +79,30 @@ class ResidualGenomeDecoder(Decoder):
         return self._model
 
 
-class ResidualGenomePhase(nn.Module):
+class ResidualPhase(nn.Module):
     """
     Residual Genome phase.
     """
-    def __init__(self, gene, in_channels, out_channels, idx, use_swapped=False):
+    def __init__(self, gene, in_channels, out_channels, idx, preact=False):
         """
         Constructor.
         :param gene: list, element of genome describing this phase.
         :param in_channels: int, number of input channels.
         :param out_channels: int, number of output channels.
         :param idx: int, index in the network.
+        :param preact: should we use the preactivation scheme?
         """
-        super(ResidualGenomePhase, self).__init__()
+        super(ResidualPhase, self).__init__()
 
         self.channel_flag = in_channels != out_channels  # Flag to tell us if we need to increase channel size.
         self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1 if idx != 0 else 3, stride=1, bias=False)
-        self.dependency_graph = ResidualGenomePhase.build_dependency_graph(gene)
+        self.dependency_graph = ResidualPhase.build_dependency_graph(gene)
 
-        if use_swapped:
-            self.nodes = nn.ModuleList([SwappedResidualGenomeNode(out_channels, out_channels) for _ in gene])
+        if preact:
+            self.nodes = nn.ModuleList([PreactResidualNode(out_channels, out_channels) for _ in gene])
 
         else:
-            self.nodes = nn.ModuleList([ResidualGenomeNode(out_channels, out_channels) for _ in gene])
+            self.nodes = nn.ModuleList([ResidualNode(out_channels, out_channels) for _ in gene])
 
         #
         # At this point, we know which nodes will be receiving input from where.
@@ -177,7 +178,7 @@ class ResidualGenomePhase(nn.Module):
             else:
                 outputs.append(self.nodes[i - 1](self.process_dependencies(i, outputs)))
 
-        return self.process_dependencies(len(self.nodes) + 1, outputs)
+        return sum([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]])
 
     def process_dependencies(self, node_idx, outputs):
         """
@@ -189,7 +190,7 @@ class ResidualGenomePhase(nn.Module):
         return self.processors[node_idx](torch.cat([outputs[i] for i in self.dependency_graph[node_idx]], dim=1))
 
 
-class ResidualGenomeNode(nn.Module):
+class ResidualNode(nn.Module):
     """
     Basic computation unit.
     Does convolution, batchnorm, and relu (in this order).
@@ -207,7 +208,7 @@ class ResidualGenomeNode(nn.Module):
         :param padding: amount of zero padding, default 1.
         :param bias: true to use bias, false to not.
         """
-        super(ResidualGenomeNode, self).__init__()
+        super(ResidualNode, self).__init__()
 
         self.model = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias),
@@ -224,7 +225,7 @@ class ResidualGenomeNode(nn.Module):
         return self.model(x)
 
 
-class SwappedResidualGenomeNode(nn.Module):
+class PreactResidualNode(nn.Module):
     """
     Basic computation unit.
     Does batchnorm, relu, and convolution (in this order).
@@ -242,7 +243,7 @@ class SwappedResidualGenomeNode(nn.Module):
         :param padding: amount of zero padding, default 1.
         :param bias: true to use bias, false to not.
         """
-        super(SwappedResidualGenomeNode, self).__init__()
+        super(PreactResidualNode, self).__init__()
 
         self.model = nn.Sequential(
             nn.BatchNorm2d(in_channels),
@@ -257,6 +258,7 @@ class SwappedResidualGenomeNode(nn.Module):
         :return: Variable.
         """
         return self.model(x)
+
 
 def demo():
     from plugins.backprop_visualizer import make_dot_backprop
