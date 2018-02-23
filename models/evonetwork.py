@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from models.model_utils import ParamCounter
 from evolution.residual_decoder import ResidualGenomeDecoder
+from evolution.variable_decoder import VariableGenomeDecoder
 
 
 def get_decoder(decoder_str, genome, channels):
@@ -16,7 +17,10 @@ def get_decoder(decoder_str, genome, channels):
         return ResidualGenomeDecoder(genome, channels)
 
     if decoder_str == "swapped-residual":
-        return ResidualGenomeDecoder(genome, channels, use_swapped=True)
+        return ResidualGenomeDecoder(genome, channels, preact=True)
+
+    if decoder_str == "variable":
+        return VariableGenomeDecoder(genome, channels)
 
     raise NotImplementedError("Decoder {} not implemented.".format(decoder_str))
 

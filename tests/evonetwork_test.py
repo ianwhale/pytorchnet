@@ -58,30 +58,32 @@ class GenomeGenerator:
             raise NotImplementedError("Unsupported encoding.")
 
         # With this layout, there are 2^18 = 262144 possible genomes.
-        return (
-            (
-                (r_bit(),),
-                (r_bit(), r_bit()),
-                (r_bit(), r_bit(), r_bit()),
-                (r_bit(),)
-            ),
-            (
-                (r_bit(),),
-                (r_bit(), r_bit()),
-                (r_bit(), r_bit(), r_bit()),
-                (r_bit(), r_bit(), r_bit(), r_bit()),
-                (r_bit(),)
-            )
-        )
+        return [
+            [
+                [r_bit()],
+                [r_bit(), r_bit()],
+                [r_bit(), r_bit(), r_bit()],
+                [r_bit()],
+                [2]
+            ],
+            [
+                [r_bit()],
+                [r_bit(), r_bit()],
+                [r_bit(), r_bit(), r_bit()],
+                [r_bit(), r_bit(), r_bit(), r_bit()],
+                [r_bit()],
+                [2]
+            ]
+        ]
 
 
 class TestEvoNetwork(unittest.TestCase):
     def test_random_genomes(self):
         """
         Iterate through a bunch of genomes and make sure all of them run without error (best I could think of...).
-        This will take around 3 minutes to run.
+        This will take a while to run.
         """
-        n = 5000  # This tests a tad less than a fifth of the possible genomes.
+        n = 2500
 
         channels = [(3, 8), (8, 16)]
         out_features = 10
@@ -89,8 +91,14 @@ class TestEvoNetwork(unittest.TestCase):
         data_shape = (32, 32)
         g = GenomeGenerator()
 
-        for _ in range(n):
-            net = EvoNetwork(g.get_random_genome(), channels, out_features, data_shape)
+        tried = {}
+
+        while n > 0:
+            genome = g.get_random_genome()
+
+            print("Testing: {}".format(genome))
+
+            net = EvoNetwork(genome, channels, out_features, data_shape, decoder="variable")
             net(data)
 
     def test_special_genomes(self):
@@ -108,7 +116,8 @@ class TestEvoNetwork(unittest.TestCase):
                     [1],
                     [1, 1],
                     [1, 1, 1],
-                    [1]
+                    [1],
+                    [2]
                 ],
                 [
                     [1],
@@ -116,7 +125,8 @@ class TestEvoNetwork(unittest.TestCase):
                     [1, 1],
                     [1, 1, 1],
                     [1, 1, 1, 1],
-                    [1]
+                    [1],
+                    [2]
                 ]
             ],
             [
@@ -124,14 +134,16 @@ class TestEvoNetwork(unittest.TestCase):
                     [0],
                     [0, 0],
                     [0, 0, 0],
-                    [0]
+                    [0],
+                    [2]
                 ],
                 [
                     [0],
                     [0, 0],
                     [0, 0, 0],
                     [0, 0, 0, 0],
-                    [0]
+                    [0],
+                    [2]
                 ]
             ],
             [
@@ -139,14 +151,16 @@ class TestEvoNetwork(unittest.TestCase):
                     [0],
                     [0, 0],
                     [0, 0, 0],
-                    [0]
+                    [0],
+                    [2]
                 ],
                 [
                     [1],
                     [1, 1],
                     [1, 1, 1],
                     [1, 1, 1, 1],
-                    [1]
+                    [1],
+                    [2]
                 ]
             ],
             [
@@ -154,18 +168,20 @@ class TestEvoNetwork(unittest.TestCase):
                     [1],
                     [1, 1],
                     [1, 1, 1],
-                    [1]
+                    [1],
+                    [2]
                 ],
                 [
                     [0],
                     [0, 0],
                     [0, 0, 0],
                     [0, 0, 0, 0],
-                    [0]
+                    [0],
+                    [2]
                 ]
             ]
         ]
 
         for genome in special_genomes:
-            net = EvoNetwork(genome, channels, out_features, data_shape)
+            net = EvoNetwork(genome, channels, out_features, data_shape, decoder='variable')
             net(data)

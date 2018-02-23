@@ -1,5 +1,6 @@
 # decoder.py
 
+import torch.nn as nn
 from abc import ABC, abstractmethod
 
 
@@ -17,6 +18,17 @@ class Decoder(ABC):
     @abstractmethod
     def get_model(self):
         raise NotImplementedError()
+
+    @staticmethod
+    def build_layers(phases):
+        layers = []
+        last_phase = phases.pop()
+        for phase in phases:
+            layers.append(phase)
+            layers.append(nn.MaxPool2d(kernel_size=2, stride=2))  # TODO: Generalize this, or consider a new genome.
+
+        layers.append(last_phase)
+        return layers
 
 #
 # TODO: Implement all these, move all to their own file.
@@ -47,3 +59,14 @@ class DONGenomeDecoder(Decoder):
 
     def get_model(self):
         pass
+
+
+class Identity(nn.Module):
+    """
+    Adding an identity allows us to keep things general in certain places.
+    """
+    def __init__(self):
+        super(Identity, self).__init__()
+
+    def forward(self, x):
+        return x

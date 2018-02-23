@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-from evolution.decoder import Decoder
+from evolution.decoder import Decoder, Identity
 
 
 def phase_active(gene):
@@ -13,17 +13,6 @@ def phase_active(gene):
     """
     # The residual bit is not relevant in if a phase is active, so we ignore it, i.e. gene[:-1].
     return sum([sum(t) for t in gene[:-1]]) != 0
-
-
-class Identity(nn.Module):
-    """
-    Adding an identity allows us to keep things general in certain places.
-    """
-    def __init__(self):
-        super(Identity, self).__init__()
-
-    def forward(self, x):
-        return x
 
 
 class ResidualGenomeDecoder(Decoder):
@@ -39,7 +28,7 @@ class ResidualGenomeDecoder(Decoder):
         super().__init__(list_genome)
 
         # First, we remove all inactive phases.
-        self._genome = ResidualGenomeDecoder.get_effective_genome(list_genome)
+        self._genome = self.get_effective_genome(list_genome)
         self._channels = channels[:len(self._genome)]
 
         # If we had no active nodes, our model is just the identity, and we stop constructing.
@@ -52,16 +41,7 @@ class ResidualGenomeDecoder(Decoder):
         for idx, (gene, (in_channels, out_channels)) in enumerate(zip(self._genome, self._channels)):
             phases.append(ResidualPhase(gene, in_channels, out_channels, idx, preact=preact))
 
-        # Combine the phases with pooling where necessary.
-        layers = []
-        last_phase = phases.pop()
-        for phase in phases:
-            layers.append(phase)
-            layers.append(nn.MaxPool2d(kernel_size=2, stride=2))  # TODO: Generalize this, or consider a new genome.
-
-        layers.append(last_phase)
-
-        self._model = nn.Sequential(*layers)
+        self._model = nn.Sequential(*self.build_layers(phases))
 
     @staticmethod
     def get_effective_genome(genome):
@@ -86,7 +66,7 @@ class ResidualPhase(nn.Module):
     def __init__(self, gene, in_channels, out_channels, idx, preact=False):
         """
         Constructor.
-        :param gene: list, element of genome describing this phase.
+        :param gene: list, element of genome describing connections in this phase.
         :param in_channels: int, number of input channels.
         :param out_channels: int, number of output channels.
         :param idx: int, index in the network.
@@ -99,10 +79,19 @@ class ResidualPhase(nn.Module):
         self.dependency_graph = ResidualPhase.build_dependency_graph(gene)
 
         if preact:
-            self.nodes = nn.ModuleList([PreactResidualNode(out_channels, out_channels) for _ in gene])
+            node_constructor = PreactResidualNode
 
         else:
-            self.nodes = nn.ModuleList([ResidualNode(out_channels, out_channels) for _ in gene])
+            node_constructor = ResidualNode
+
+        nodes = []
+        for i in range(len(gene)):
+            if len(self.dependency_graph[i + 1]) > 0:
+                nodes.append(node_constructor(out_channels, out_channels))
+            else:
+                nodes.append(None)  # Module list will ignore NoneType.
+
+        self.nodes = nn.ModuleList(nodes)
 
         #
         # At this point, we know which nodes will be receiving input from where.
@@ -287,9 +276,9 @@ def demo():
     channels = [(3, 8), (8, 8), (8, 8)]
     data = torch.randn(16, 3, 32, 32)
 
-    model = ResidualGenomeDecoder(genome, channels).get_model()
+    model = ResidualGenomeDecoder(genome, channels, preact=True).get_model()
     out = model(torch.autograd.Variable(data))
-
+    print(model)
     make_dot_backprop(out).view()
 
 
