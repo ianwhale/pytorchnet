@@ -57,7 +57,6 @@ class GenomeGenerator:
         if encoding != "residual":
             raise NotImplementedError("Unsupported encoding.")
 
-        # With this layout, there are 2^18 = 262144 possible genomes.
         return [
             [
                 [r_bit()],
