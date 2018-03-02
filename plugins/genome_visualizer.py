@@ -2,7 +2,7 @@
 
 from graphviz import Digraph
 from string import ascii_letters
-from evolution.residual_decoder import ResidualGenomePhase
+from evolution.residual_decoder import ResidualPhase
 
 
 def get_graph_function(type):
@@ -12,7 +12,7 @@ def get_graph_function(type):
     :return: callable
     """
     if type == "residual":
-        return ResidualGenomePhase.build_dependency_graph
+        return ResidualPhase.build_dependency_graph
 
     raise NotImplementedError("Genome type {} not supported.".format(type))
 
