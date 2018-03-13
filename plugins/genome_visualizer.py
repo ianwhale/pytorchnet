@@ -129,6 +129,7 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
 
     dot.node("linear", "Linear", fillcolor=fc_color)
     dot.edge(structure[-1]['pool'][0], "linear")
+    dot.attr(dpi="300")
 
     # TODO: Add legend (?)
 
