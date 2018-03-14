@@ -1,155 +1,184 @@
 # train.py
 
+import time
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
-
 import plugins
 
 
-class Trainer():
-    def __init__(self, args, model, criterion):
+class Trainer:
+    def __init__(self, args, model, criterion, evaluation):
         self.args = args
         self.model = model
         self.criterion = criterion
+        self.evaluation = evaluation
+        self.save_results = args.save_results
 
+        self.env = args.env
         self.port = args.port
-        self.dir_save = args.save
+        self.dir_save = args.save_dir
+        self.log_type = args.log_type
 
         self.cuda = args.cuda
         self.nepochs = args.nepochs
-        self.nchannels = args.nchannels
         self.batch_size = args.batch_size
+
         self.resolution_high = args.resolution_high
         self.resolution_wide = args.resolution_wide
 
         self.lr = args.learning_rate
-        self.momentum = args.momentum
-        self.adam_beta1 = args.adam_beta1
-        self.adam_beta2 = args.adam_beta2
-        self.weight_decay = args.weight_decay
         self.optim_method = args.optim_method
+        self.optim_options = args.optim_options
+        self.scheduler_method = args.scheduler_method
+        self.scheduler_options = args.scheduler_options
 
-        if self.optim_method == 'Adam':
-            self.optimizer = optim.Adam(
-                model.parameters(), lr=self.lr, weight_decay=self.weight_decay,
-                betas=(self.adam_beta1, self.adam_beta2),
+        self.optimizer = getattr(optim, self.optim_method)(
+            model.parameters(), lr=self.lr, **self.optim_options)
+        if self.scheduler_method is not None:
+            self.scheduler = getattr(optim.lr_scheduler,
+                                     self.scheduler_method)(
+                self.optimizer, **self.scheduler_options
             )
-        elif self.optim_method == 'RMSprop':
-            self.optimizer = optim.RMSprop(
-                model.parameters(), lr=self.lr, weight_decay=self.weight_decay,
-            )
-        elif self.optim_method == 'SGD':
-            self.optimizer = optim.SGD(
-                model.parameters(), lr=self.lr, weight_decay=self.weight_decay,
-                momentum=self.momentum, nesterov=True
-            )
-        else:
-            raise(Exception("Unknown Optimization Method"))
 
         # for classification
-        self.label = torch.zeros(self.batch_size).long()
-        self.input = torch.zeros(self.batch_size, self.nchannels,
-                                 self.resolution_high, self.resolution_wide)
-
-        if args.cuda:
-            self.label = self.label.cuda()
-            self.input = self.input.cuda()
-
-        self.input = Variable(self.input)
-        self.label = Variable(self.label)
-
-        # logging training
-        #self.log_loss_train = plugins.Logger(args.logs, 'TrainLogger.txt')
-        self.params_loss_train = ['Loss', 'Accuracy']
-        #self.log_loss_train.register(self.params_loss_train)
-
-        # monitor training
-        self.monitor_train = plugins.Monitor()
-        self.params_monitor_train = ['Loss', 'Accuracy']
-        self.monitor_train.register(self.params_monitor_train)
-
-        # visualize training
-        # self.visualizer_train = plugins.Visualizer(self.port, 'Train')
-        # self.params_visualizer_train = {
-        #     'Loss': {'dtype': 'scalar', 'vtype': 'plot'},
-        #     'Accuracy': {'dtype': 'scalar', 'vtype': 'plot'},
-        #     'Image': {'dtype': 'image', 'vtype': 'image'},
-        #     'Images': {'dtype': 'images', 'vtype': 'images'},
-        # }
-        # self.visualizer_train.register(self.params_visualizer_train)
-
-        # display training progress
-        self.print_train = 'Train [%d/%d][%d/%d] '
-        for item in self.params_loss_train:
-            self.print_train = self.print_train + item + " %.4f "
-
-        self.evalmodules = []
-        self.losses_train = {}
-        # print(self.model)
-
-    def learning_rate(self, epoch):
-        # training schedule
-        return self.lr * (
-            (0.1 ** int(epoch >= 60)) *
-            (0.1 ** int(epoch >= 120)) *
-            (0.1 ** int(epoch >= 160))
+        self.labels = torch.zeros(self.batch_size).long()
+        self.inputs = torch.zeros(
+            self.batch_size,
+            self.resolution_high,
+            self.resolution_wide
         )
 
-    def get_optimizer(self, epoch, optimizer):
-        lr = self.learning_rate(epoch)
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-        return optimizer
+        if args.cuda:
+            self.labels = self.labels.cuda()
+            self.inputs = self.inputs.cuda()
+
+        self.inputs = Variable(self.inputs)
+        self.labels = Variable(self.labels)
+
+        # logging training
+        self.log_loss = plugins.Logger(
+            args.logs_dir,
+            'TrainLogger.txt',
+            self.save_results
+        )
+        self.params_loss = ['Loss', 'Accuracy']
+        self.log_loss.register(self.params_loss)
+
+        # monitor training
+        self.monitor = plugins.Monitor()
+        self.params_monitor = {
+            'Loss': {'dtype': 'running_mean'},
+            'Accuracy': {'dtype': 'running_mean'}
+        }
+        self.monitor.register(self.params_monitor)
+
+        # visualize training
+        self.visualizer = plugins.Visualizer(self.port, self.env, 'Train')
+        self.params_visualizer = {
+            'Loss': {'dtype': 'scalar', 'vtype': 'plot', 'win': 'loss',
+                     'layout': {'windows': ['train', 'test'], 'id': 0}},
+            'Accuracy': {'dtype': 'scalar', 'vtype': 'plot', 'win': 'accuracy',
+                         'layout': {'windows': ['train', 'test'], 'id': 0}},
+            'Train_Image': {'dtype': 'image', 'vtype': 'image',
+                            'win': 'train_image'},
+            'Train_Images': {'dtype': 'images', 'vtype': 'images',
+                             'win': 'train_images'},
+        }
+        self.visualizer.register(self.params_visualizer)
+
+        if self.log_type == 'traditional':
+            # display training progress
+            self.print_formatter = 'Train [%d/%d][%d/%d] '
+            for item in self.params_loss:
+                self.print_formatter += item + " %.4f "
+        elif self.log_type == 'progressbar':
+            # progress bar message formatter
+            self.print_formatter = '({}/{})' \
+                                   ' Load: {:.6f}s' \
+                                   ' | Process: {:.3f}s' \
+                                   ' | Total: {:}' \
+                                   ' | ETA: {:}'
+            for item in self.params_loss:
+                self.print_formatter += ' | ' + item + ' {:.4f}'
+            self.print_formatter += ' | lr: {:.2e}'
+
+        self.evalmodules = []
+        self.losses = {}
 
     def model_train(self):
         self.model.train()
 
     def train(self, epoch, dataloader):
         dataloader = dataloader['train']
-        self.monitor_train.reset()
-        data_iter = iter(dataloader)
-        self.optimizer = self.get_optimizer(epoch + 1, self.optimizer)
+        self.monitor.reset()
 
         # switch to train mode
         self.model_train()
 
-        i = 0
-        while i < len(dataloader):
+        if self.log_type == 'progressbar':
+            # Progress bar
+            processed_data_len = 0
+            bar = plugins.Bar('{:<10}'.format('Train'), max=len(dataloader))
+        end = time.time()
+
+        for i, (inputs, labels) in enumerate(dataloader):
+            # keeps track of data loading time
+            data_time = time.time() - end
 
             ############################
             # Update network
             ############################
 
-            input, label = data_iter.next()
-            i += 1
+            batch_size = inputs.size(0)
+            self.inputs.data.resize_(inputs.size()).copy_(inputs)
+            self.labels.data.resize_(labels.size()).copy_(labels)
 
-            batch_size = input.size(0)
-            self.input.data.resize_(input.size()).copy_(input)
-            self.label.data.resize_(label.size()).copy_(label)
-
-            output = self.model(self.input)
-            loss = self.criterion(output, self.label)
+            outputs = self.model(self.inputs)
+            loss = self.criterion(outputs, self.labels)
 
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
 
-            # this is for classfication
-            pred = output.data.max(1)[1]
-            acc = pred.eq(self.label.data).cpu().sum() * 100 / batch_size
-            self.losses_train['Accuracy'] = acc
-            self.losses_train['Loss'] = loss.data[0]
-            self.monitor_train.update(self.losses_train, batch_size)
+            acc = self.evaluation(outputs, self.labels)
 
-        # print batch progress
-        print(self.print_train % tuple(
-            [epoch, self.nepochs, i, len(dataloader)] +
-            [self.losses_train[key] for key in self.params_monitor_train]))
+            self.losses['Accuracy'] = acc
+            self.losses['Loss'] = loss.data[0]
+            self.monitor.update(self.losses, batch_size)
 
-        loss = self.monitor_train.getvalues()
-        # self.log_loss_train.update(loss)
-        loss['Image'] = input[0]
-        loss['Images'] = input
-        # self.visualizer_train.update(loss)
-        return self.monitor_train.getvalues('Loss')
+            if self.log_type == 'traditional':
+                # print batch progress
+                print(self.print_formatter % tuple(
+                    [epoch + 1, self.nepochs, i, len(dataloader)] +
+                    [self.losses[key] for key in self.params_monitor]))
+            elif self.log_type == 'progressbar':
+                # update progress bar
+                batch_time = time.time() - end
+                processed_data_len += len(inputs)
+
+                bar.suffix = self.print_formatter.format(
+                    *[processed_data_len, len(dataloader.sampler), data_time,
+                      batch_time, bar.elapsed_td, bar.eta_td] +
+                     [self.losses[key] for key in self.params_monitor] +
+                     [self.optimizer.param_groups[-1]['lr']]
+                )
+                bar.next()
+                end = time.time()
+
+        if self.log_type == 'progressbar':
+            bar.finish()
+
+        loss = self.monitor.getvalues()
+        self.log_loss.update(loss)
+        loss['Train_Image'] = inputs[0]
+        loss['Train_Images'] = inputs
+        self.visualizer.update(loss)
+
+        if self.scheduler_method is not None:
+            if self.scheduler_method == 'ReduceLROnPlateau':
+                self.scheduler.step(loss['Loss'])
+            else:
+                self.scheduler.step()
+
+        return self.monitor.getvalues('Loss')

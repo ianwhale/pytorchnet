@@ -1,4 +1,7 @@
 # __init__.py
 
-from .regression import Regression
-from .classification import Classification
+from .classification import *
+from .regression import *
+from .uncertainty import *
+from .angular_softmax import *
+from .triplet import *

@@ -1,7 +1,9 @@
 # classification.py
 
-import torch
 from torch import nn
+
+__all__ = ['Classification']
+
 
 class Classification(nn.Module):
 
@@ -9,6 +11,6 @@ class Classification(nn.Module):
         super(Classification, self).__init__()
         self.loss = nn.CrossEntropyLoss()
 
-    def forward(self, input, target):
+    def __call__(self, input, target):
         loss = self.loss(input, target)
         return loss

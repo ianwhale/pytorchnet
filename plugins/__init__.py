@@ -7,3 +7,4 @@ from .visualizer import Visualizer
 from .backprop_visualizer import make_dot_backprop
 from .graph_similarity import *
 from .ged4py import *
+from .progress.progress.bar import Bar

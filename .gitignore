@@ -103,3 +103,7 @@ output.txt
 *.pdf
 # results folder
 results/
+
+
+# data folder
+data/
