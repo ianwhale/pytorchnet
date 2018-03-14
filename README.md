@@ -74,14 +74,3 @@ When PyTorchNet is being run, it will automatically load all parameters from [ar
 > dataset_test = CIFAR10\
 > batch_size = 64
 
-
-## Command line
-Parameters can also be set in the command line when invoking [main.py](https://github.com/human-analysis/pytorchnet/blob/master/main.py). These parameters will precede the existing parameters in the configuration file.
-> python [main.py](https://github.com/human-analysis/pytorchnet/blob/master/main.py) --log-type progressbar
-
-<<<<<<< HEAD
-```{r, engine='bash', sample run}
-python main.py --manual-seed 0 --dataset-train CIFAR10 --dataset-test CIFAR10 --dataroot ../ --nthreads 40 --optim-method Adam --batch-size 64 --learning-rate 3e-4 --adam-beta1 0.9 --adam-beta2 0.999 --nclasses 10 --nchannels 3 --resolution-high 32 --resolution-wide 32 --nepochs 100 --momentum 0.9 --weight-decay 0.0 --port 8097 --net-type resnet18 --nfilters 64 --cuda True --ngpu 1
-```
-=======
->>>>>>> original/master
