@@ -17,6 +17,71 @@ def get_graph_function(type):
     raise NotImplementedError("Genome type {} not supported.".format(type))
 
 
+def make_dot_phase(genome, phase, rankdir="UD", format="pdf", title=None, filename="genome", type="residual"):
+    """
+    Visualize a single phase.
+    :param genome: list of lists.
+    :param phase: int, index of phase to visualize.
+    :param rankdir: direction graph is oriented "UD"=Vertical, "LR"=horizontal.
+    :param format: output file format, jpg, png, etc.
+    :param title: title of graph.
+    :param filename: filename of graph.
+    :param type: string, what kind of decoder should we use.
+    :return: graphviz dot object.
+    :return:
+    """
+    node_color = "lightblue"
+    conv1x1_color = "white"
+    sum_color = "green4"
+    pool_color = "orange"
+    phase_background_color = "gray"
+    fc_color = "gray"
+    node_shape = "circle"
+    conv1x1_shape = "doublecircle"
+
+    gene = genome[phase]
+    graph_function = get_graph_function(type)
+    graph = graph_function(gene)
+
+    nodes = [("node_0", ' ')] + [("node_" + str(j + 1), ' ') for j in range(len(gene) + 1)]
+    edges = []
+
+    for sink, dependencies in graph.items():
+        for source in dependencies:
+            edges.append((nodes[source][0], nodes[sink][0]))
+
+    node_attr = dict(style='filled',
+                     shape='box',
+                     align='left',
+                     fontsize='12',
+                     ranksep='0.1',
+                     height='0.2')
+    dot = Digraph(format=format, filename=filename+'.gv', node_attr=node_attr, graph_attr=dict(size="12,12"))
+    dot.attr(rankdir=rankdir)
+
+    if title:
+        dot.attr(label=title+"\n\n")
+        dot.attr(labelloc='t')
+
+    dot.node(nodes[0][0], nodes[0][1], fillcolor=conv1x1_color, shape=conv1x1_shape)
+
+    with dot.subgraph(name="cluster") as p:
+        p.attr(fillcolor=phase_background_color, label='', fontcolor="black", style="filled")
+
+        for i in range(1, len(nodes) - 1):
+            if len(graph[i]) != 0:
+                p.node(nodes[i][0], nodes[i][1], fillcolor=node_color, shape=node_shape)
+
+    dot.node(nodes[-1][0], nodes[-1][1], fillcolor=sum_color, shape=node_shape)
+
+    # Add edges.
+    for edge in edges:
+        dot.edge(*edge)
+
+    dot.attr(dpi="300")
+    return dot
+
+
 def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="genome", type="residual"):
     """
     Graphviz representation of network created by genome.
@@ -34,7 +99,6 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
     pool_color = "orange"
     phase_background_color = "gray"
     fc_color = "gray"
-
     node_shape = "circle"
     conv1x1_shape = "doublecircle"
 
@@ -54,7 +118,6 @@ def make_dot_genome(genome, rankdir="UD", format="pdf", title=None, filename="ge
             + [(prefix + "_node_" + str(j + 1), ' ') for j in range(len(gene) + 1)]
 
         pool = (prefix + "_pool", "Pooling")
-
 
         edges = []
         graph_function = get_graph_function(type)
@@ -162,9 +225,11 @@ def demo():
         ]
     ]
 
-    d = make_dot_genome(genome, title="Demo Genome", filename="test")
-    d.view()
+    # d = make_dot_genome(genome, title="Demo Genome", filename="test")
+    # d.view()
 
+    d = make_dot_phase(genome, 1)
+    d.view()
 
 if __name__ == "__main__":
     demo()
