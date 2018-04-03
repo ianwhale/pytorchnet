@@ -105,6 +105,10 @@ class ResidualPhase(nn.Module):
                     nn.Conv2d(len(dependencies) * out_channels, out_channels, kernel_size=1, bias=False)
 
         self.processors = nn.ModuleList(conv1x1s)
+        self.out = nn.Sequential(
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
 
     @staticmethod
     def build_dependency_graph(gene):
@@ -167,7 +171,7 @@ class ResidualPhase(nn.Module):
             else:
                 outputs.append(self.nodes[i - 1](self.process_dependencies(i, outputs)))
 
-        return sum([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]])
+        return self.out(self.process_dependencies(len(self.nodes) + 1, outputs))
 
     def process_dependencies(self, node_idx, outputs):
         """
