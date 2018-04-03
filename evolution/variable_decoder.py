@@ -99,9 +99,10 @@ class DensePhase(nn.Module):
 
         for dep in self.dependency_graph[len(gene) + 1]:
             if dep == 0:
-                continue
+                channel_adjustment += out_channels
 
-            channel_adjustment += DenseNode.t
+            else:
+                channel_adjustment += DenseNode.t
 
         self.last_conv = nn.Conv2d(channel_adjustment, out_channels, kernel_size=1, stride=1, bias=False)
 
@@ -115,6 +116,11 @@ class DensePhase(nn.Module):
                 nodes.append(None)
 
         self.nodes = nn.ModuleList(nodes)
+        self.out = nn.Sequential(
+            self.last_conv,
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
 
     @staticmethod
     def compute_channels(dependency, out_channels):
@@ -152,13 +158,13 @@ class DensePhase(nn.Module):
             # Get the last nodes in the phase and change their channels to match the desired output.
             non_zero_dep = [dep for dep in self.dependency_graph[len(self.nodes) + 1] if dep != 0]
 
-            return self.last_conv(torch.cat([outputs[i] for i in non_zero_dep], dim=1)) + outputs[0]
+            return self.out(torch.cat([outputs[i] for i in non_zero_dep] + [outputs[0]], dim=1))
 
         if self.out_channel_flag:
             # Same as above, we just don't worry about the 0th node.
-            return self.last_conv(torch.cat([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]], dim=1))
+            return self.out(torch.cat([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]], dim=1))
 
-        return sum([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]])
+        return self.out(torch.cat([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]]))
 
 
 class DenseNode(nn.Module):
