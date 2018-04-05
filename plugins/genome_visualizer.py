@@ -1,8 +1,7 @@
 # evo_visualizer.py
 
 from graphviz import Digraph
-from string import ascii_letters
-from evolution.residual_decoder import ResidualPhase
+from evolution import ResidualPhase
 
 
 def get_graph_function(type):

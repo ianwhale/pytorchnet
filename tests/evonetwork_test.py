@@ -63,7 +63,6 @@ class GenomeGenerator:
                 [r_bit(), r_bit()],
                 [r_bit(), r_bit(), r_bit()],
                 [r_bit()],
-                [2]
             ],
             [
                 [r_bit()],
@@ -71,7 +70,6 @@ class GenomeGenerator:
                 [r_bit(), r_bit(), r_bit()],
                 [r_bit(), r_bit(), r_bit(), r_bit()],
                 [r_bit()],
-                [2]
             ]
         ]
 
@@ -90,14 +88,12 @@ class TestEvoNetwork(unittest.TestCase):
         data_shape = (32, 32)
         g = GenomeGenerator()
 
-        tried = {}
-
         while n > 0:
             genome = g.get_random_genome()
 
             print("Testing: {}".format(genome))
 
-            net = EvoNetwork(genome, channels, out_features, data_shape, decoder="variable")
+            net = EvoNetwork(genome, channels, out_features, data_shape, decoder="dense")
             net(data)
 
     def test_special_genomes(self):

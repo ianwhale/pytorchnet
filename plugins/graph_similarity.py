@@ -131,6 +131,11 @@ def demo():
     print("Edit distance between 1 and 3: {}".format(ged_similarity_score(dg_1, dg_3)))
     print("Edit distance between 2 and 3: {}".format(ged_similarity_score(dg_2, dg_3)))
 
+    print("Eigendistance between 1 and 1: {}".format(eigen_similarity_score(dg_1, dg_1)))
+    print("Eigendistance between 1 and 2: {}".format(eigen_similarity_score(dg_1, dg_2)))
+    print("Eigendistance between 1 and 3: {}".format(eigen_similarity_score(dg_1, dg_3)))
+    print("Eigendistance between 2 and 3: {}".format(eigen_similarity_score(dg_2, dg_3)))
+
     start = time.time()
     for _ in range(200):
         ged_similarity_score(dg_1, dg_2)

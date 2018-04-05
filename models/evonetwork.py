@@ -2,22 +2,25 @@
 
 import torch
 import torch.nn as nn
-from models.model_utils import ParamCounter
-from evolution.residual_decoder import ResidualGenomeDecoder
-from evolution.variable_decoder import VariableGenomeDecoder
+from evolution import ResidualGenomeDecoder, VariableGenomeDecoder, DenseGenomeDecoder
 
 
 def get_decoder(decoder_str, genome, channels):
     """
     Construct the appropriate decoder.
     :param decoder_str: string, refers to what genome scheme we're using.
-    :return: Decoder
+    :param genome: list, list of genomes.
+    :param channels: list, list of channel sizes.
+    :return: evolution.Decoder
     """
     if decoder_str == "residual":
         return ResidualGenomeDecoder(genome, channels)
 
     if decoder_str == "swapped-residual":
         return ResidualGenomeDecoder(genome, channels, preact=True)
+
+    if decoder_str == "dense":
+        return DenseGenomeDecoder(genome, channels)
 
     if decoder_str == "variable":
         return VariableGenomeDecoder(genome, channels)
@@ -110,7 +113,6 @@ def demo():
     output = net(torch.autograd.Variable(data))
 
     print(output)
-    print("Trainable parameters: {}".format(ParamCounter(output).get_count()))
 
 
 if __name__ == "__main__":

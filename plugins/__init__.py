@@ -1,10 +1,9 @@
 # __init__.py
 
-from .image import Image
-from .logger import Logger
-from .monitor import Monitor
-from .visualizer import Visualizer
-from .backprop_visualizer import make_dot_backprop
-from .graph_similarity import *
-from .ged4py import *
-from .progress.progress.bar import Bar
+from plugins.image import Image
+from plugins.logger import Logger
+from plugins.monitor import Monitor
+# from .visualizer import Visualizer
+from plugins.backprop_visualizer import make_dot_backprop
+from plugins.graph_similarity import *
+from plugins.ged4py import *

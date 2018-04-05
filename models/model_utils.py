@@ -16,7 +16,7 @@ def prod(items):
     return total
 
 
-class ParamCounter():
+class ParamCounter:
     def __init__(self, output_var):
         assert isinstance(output_var, Variable)
 
@@ -56,7 +56,7 @@ class ParamCounter():
 
 def demo():
     import torch
-    from models.evonetwork import EvoNetwork
+    import models
     """
     This demo uses EvoNetwork, however the output of any type of PyTorch network will work.
     """
@@ -69,7 +69,7 @@ def demo():
 
     channels = [(3, 8)]
     out_features = 10
-    net = EvoNetwork(genome, channels, out_features, (32, 32))
+    net = models.EvoNetwork(genome, channels, out_features, (32, 32))
 
     data = torch.randn(3, 3, 32, 32)
     output = net(Variable(data))
