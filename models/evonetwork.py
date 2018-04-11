@@ -11,7 +11,7 @@ def get_decoder(decoder_str, genome, channels):
     :param decoder_str: string, refers to what genome scheme we're using.
     :param genome: list, list of genomes.
     :param channels: list, list of channel sizes.
-    :return: evolution.Decoder
+    :return: evolution.ChannelBasedDecoder
     """
     if decoder_str == "residual":
         return ResidualGenomeDecoder(genome, channels)

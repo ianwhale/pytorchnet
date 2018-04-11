@@ -3,12 +3,14 @@
 import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 
 
 class Decoder(ABC):
     """
     Abstract genome decoder class.
     """
+
     @abstractmethod
     def __init__(self, list_genome):
         """
@@ -25,6 +27,7 @@ class ChannelBasedDecoder(Decoder):
     """
     Channel based decoder that deals with encapsulating constructor logic.
     """
+
     def __init__(self, list_genome, channels):
         super().__init__(list_genome)
 
@@ -68,10 +71,467 @@ class ChannelBasedDecoder(Decoder):
         raise NotImplementedError()
 
 
+class HourGlassDecoder(Decoder):
+    """
+    Decoder that deals with HourGlass-type networks.
+    """
+
+    def __init__(self, genome, n_stacks, out_feature_maps):
+        """
+        Constructor.
+        :param genome: list, list of ints.
+        :param n_stacks: int, number of hourglasses to use.
+        :param out_feature_maps: int, number of output feature maps.
+        """
+        super().__init__(genome)
+
+        self.n_stacks = n_stacks
+        self.out_feature_maps = out_feature_maps
+
+    @abstractmethod
+    def get_model(self):
+        raise NotImplementedError()
+
+    @staticmethod
+    @abstractmethod
+    def check_genome(genome):
+        raise NotImplementedError()
+
+
+class LOSHourGlassDecoder(HourGlassDecoder, nn.Module):
+    """
+    Line of sight HourGlass decoder.
+    """
+
+    STEP_TOLERANCE = 2  # A network can step as much as
+    GENE_LB = 0  # Gene must be greater than this value.
+    GENE_UB = 6  # Gene must be less than this value.
+
+    TO_RESIDUALS = 32   # Number of feature maps input to the initial residual units.
+    TO_HOURGLASS = 64  # Number of feature maps input to the hourglasses.
+
+    def __init__(self, genome, n_stacks, out_feature_maps):
+        """
+        Constructor.
+        :param genome: list, list of ints satisfying properties defined in self.valid_genome.
+        :param n_stacks: int, number of hourglasses to use.
+        :param out_feature_maps, int, number of output feature maps.
+        """
+        HourGlassDecoder.__init__(self, genome, n_stacks, out_feature_maps)
+        nn.Module.__init__(self)
+
+        self.check_genome(genome)
+
+        # Initial resolution reducing, takes 256 x 256 to 64 x 64
+        self.initial = nn.Sequential(
+            nn.Conv2d(3, self.TO_RESIDUALS, kernel_size=7, stride=2, padding=3, bias=True),
+            nn.BatchNorm2d(self.TO_RESIDUALS),
+            nn.ReLU(inplace=True),
+            HourGlassResidual(self.TO_RESIDUALS, self.TO_RESIDUALS)
+        )
+
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.secondary = nn.Sequential(
+            HourGlassResidual(self.TO_RESIDUALS, self.TO_RESIDUALS),
+            HourGlassResidual(self.TO_RESIDUALS, self.TO_HOURGLASS)
+        )
+
+        #
+        # Evolved part follows.
+        #
+        graph = LOSComputationGraph(genome)  # The evolved computation graph.
+        hg_channels = self.TO_HOURGLASS * LOSHourGlassBlock.EXPANSION  # Number of channels output by the hourglass.
+
+        # List of hourglasses, deep copy of hourglass constructed above.
+        hourglasses = [LOSHourGlassBlock(graph, self.TO_HOURGLASS, hg_channels)]
+
+        # Lin layers run on the output of the hourglass.
+        first_lin = [Lin(hg_channels, hg_channels)]
+        second_lin = [Lin(hg_channels, self.TO_HOURGLASS)]
+
+        # 1x1 convs to adjust channels to fit number of scoremaps.
+        to_score_map = [nn.Conv2d(self.TO_HOURGLASS, out_feature_maps, kernel_size=1, bias=True)]
+        # 1x1 convs to adjust scoremap back to appropriate feature map count.
+        from_score_map = [nn.Conv2d(out_feature_maps, self.TO_HOURGLASS + self.TO_RESIDUALS, kernel_size=1, bias=True)]
+
+        # 1x1 convs for the skip connection that skips the hourglass.
+        skip_convs = [nn.Conv2d(self.TO_HOURGLASS + self.TO_RESIDUALS, self.TO_HOURGLASS + self.TO_RESIDUALS,
+                                kernel_size=1, bias=True)]
+
+        skip_channels = self.TO_RESIDUALS
+
+        #
+        # The above and proceeding code is overly complex to deal with the fact that the first skip connection will
+        # have less channels than the rest of the network, as specified in the original implementation.
+        #
+
+        for i in range(1, n_stacks):
+            hourglasses.append(LOSHourGlassBlock(graph, self.TO_HOURGLASS + skip_channels, hg_channels))
+            first_lin.append(Lin(hg_channels, hg_channels))
+
+            to_score_map.append(nn.Conv2d(self.TO_HOURGLASS, out_feature_maps, kernel_size=1, bias=True))
+            second_lin.append(Lin(hg_channels, self.TO_HOURGLASS))
+
+            # We only need go back to the original channel sizes from the score maps n - 1 times.
+            if i < n_stacks - 1:
+                skip_convs.append(nn.Conv2d(hg_channels, hg_channels, kernel_size=1, bias=True))
+                from_score_map.append(nn.Conv2d(out_feature_maps, hg_channels, kernel_size=1,
+                                                bias=True))
+
+            skip_channels = self.TO_HOURGLASS
+
+        # Register everything by converting to ModuleLists.
+        self.hourglasses = nn.ModuleList(hourglasses)
+        self.first_lin = nn.ModuleList(first_lin)
+        self.to_score_map = nn.ModuleList(to_score_map)
+        self.from_score_map = nn.ModuleList(from_score_map)
+        self.second_lin = nn.ModuleList(second_lin)
+        self.skip_convs = nn.ModuleList(skip_convs)
+
+    @staticmethod
+    def check_genome(genome):
+        """
+        Make sure the genome is valid.
+        :param genome: list, list of ints, representing the genome.
+        :raises AssertionError: if genome is not valid.
+        """
+        assert isinstance(genome[0], int), "Genome should be a list of integers."
+
+        for gene in genome:
+            assert LOSHourGlassDecoder.GENE_LB < gene < LOSHourGlassDecoder.GENE_UB, \
+                "{} is an invalid gene value, must be in range [{}, {}]".format(gene,
+                                                                                LOSHourGlassDecoder.GENE_LB,
+                                                                                LOSHourGlassDecoder.GENE_UB)
+        for i in range(len(genome) - 1):
+            step = abs(genome[i] - genome[i + 1])
+            assert step <= LOSHourGlassDecoder.STEP_TOLERANCE, \
+                "Attempted to step {} resolutions, cannot step more than 2 resolutions.".format(step)
+
+    def get_model(self):
+        """
+        In other decoders, we'd return a module object, but since self is an nn.Module, we return self.
+        :return: self
+        """
+        return self
+
+    def forward(self, x):
+        """
+        Forward operation.
+        :param x: Variable, input
+        :return: list, list of Variables, intermediate and final score maps.
+        """
+        maps = []
+
+        x = self.initial(x)
+        x = self.pool(x)
+
+        skip = x.clone()
+
+        x = self.secondary(x)
+
+        for i in range(self.n_stacks):
+            y = self.hourglasses[i](x)
+            y = self.first_lin[i](y)
+            y = self.second_lin[i](y)
+
+            next_skip = y.clone()
+
+            score_map = self.to_score_map[i](y)
+
+            maps.append(score_map)
+
+            # We only need to map back from the score feature maps and do skip connection n - 1 times.
+            if i < self.n_stacks - 1:
+                z = self.from_score_map[i](score_map)
+                a = torch.cat((y, skip), dim=1)
+                a = self.skip_convs[i](a)
+
+                x = z + a
+
+            skip = next_skip
+
+        return maps
+
+
+class Lin(nn.Module):
+    """
+    "Lin" layer as implemented in: https://github.com/umich-vl/pose-hg-demo/blob/master/stacked-hourglass-model.lua
+    """
+    def __init__(self, in_channels, out_channels):
+        """
+        Constructor.
+        :param in_channels: int, input channels.
+        :param out_channels: int, desired output channels.
+        """
+        super(Lin, self).__init__()
+
+        self.model = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=True),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class LOSHourGlassBlock(nn.Module):
+    """
+    HourGlassBlock, repeated in an hourglass-type network.
+    """
+
+    CHANNELS = 64  # Hour glass will operate at this channel size.
+    EXPANSION = 2  # Hour glass block will increase channels by a factor of 2.
+
+    def __init__(self, graph, in_channels, out_channels):
+        """
+        Constructor.
+        :param graph: decoder.LOSComputationGraph, represents the computation flow.
+        :param in_channels: int, number of input channels.
+        :param out_channels: int, number of output channels.
+        """
+        super(LOSHourGlassBlock, self).__init__()
+
+        self.graph = graph
+        samplers = []
+        nodes, _ = zip(*self.graph.items())
+        nodes = [None] + list(nodes) + [None]  # Append none's to downsample input and upsample output if needed.
+        for i in range(len(nodes[:-1])):
+            samplers.append(self.make_sampling(nodes[i], nodes[i + 1]))
+
+        self.samplers = nn.ModuleList(samplers)
+
+        skip_ops = []  # HourGlassResiduals for the skip connections
+        for node in graph.keys():
+            if node.residual:
+                skip_ops.append(HourGlassResidual(self.CHANNELS, self.CHANNELS))
+
+            else:
+                skip_ops.append(None)  # Filler to make the indices match
+
+        last_node = list(graph.keys())[-1]
+        res = graph.get_residual(last_node)
+        if res:
+            # If the last node receives a residual, we need to change the operation to output the right channel size.
+            skip_ops[res.idx] = HourGlassResidual(self.CHANNELS, out_channels)
+
+        self.skip_ops = nn.ModuleList(skip_ops)
+
+        path_ops = [HourGlassResidual(in_channels, self.CHANNELS)]
+        for i in range(len(graph) - 2):
+            path_ops.append(HourGlassResidual(self.CHANNELS, self.CHANNELS))
+
+        path_ops.append(HourGlassResidual(self.CHANNELS, out_channels))
+
+        self.path_ops = nn.ModuleList(path_ops)
+
+    @staticmethod
+    def make_sampling(prev_node, next_node):
+        """
+        Determine the factor of up/down sampling needed to move between two nodes.
+        :param prev_node: LOSComputationGraph.Node | None.
+        :param next_node: LOSComputationGraph.Node.
+        :return: nn.MaxPool2d | nn.Upsample
+        """
+        if prev_node is None:
+            # We're dealing with the first node (idx 0) so we need a placeholder node.
+            prev_node = LOSComputationGraph.Node(1, -1)
+
+        if next_node is None:
+            next_node = LOSComputationGraph.Node(1, -1)
+
+        if prev_node.resolution == next_node.resolution:
+            # Nothing to be done.
+            return Identity()
+
+        elif prev_node.resolution > next_node.resolution:
+            # We need to downsample.
+            s = int(prev_node.resolution / next_node.resolution)
+            return nn.MaxPool2d(kernel_size=2, stride=s)
+
+        else:
+            # We need to upsample.
+            f = int(next_node.resolution / prev_node.resolution)
+            return nn.Upsample(scale_factor=f, mode="nearest")
+
+    def forward(self, x):
+        residuals = [None for _ in range(len(self.graph))]
+
+        x = self.samplers[0](x)
+
+        for i, (node, dependancies) in enumerate(self.graph.items()):
+            x = self.path_ops[i](x)
+
+            if node.residual:
+                residuals[i] = self.skip_ops[i](x)
+
+            res = self.graph.get_residual(node)
+            if res:
+                x += residuals[res.idx]
+
+            x = self.samplers[i + 1](x)
+
+        return self.samplers[-1](x)
+
+
+class LOSComputationGraph:
+    """
+    Graph to hold information about the computation going on in
+    """
+    class Node:
+        """
+        Node to hold information.
+        """
+        def __init__(self, resolution, idx, residual=False):
+            """
+            Constructor.
+            :param resolution: int, the resolution of the image at this point.
+            :param idx: int, the index of the node in the graph (feed-forward, so this is ok).
+            :param residual: bool, true if output of this node is needed at some point later in the graph.
+            """
+            self.resolution, self.idx, self.residual = resolution, idx, residual
+
+        def __repr__(self):
+            residual_str = ", saves residual" if self.residual else ""
+            return "<Node index: {} resolution: {}".format(self.idx, self.resolution) + residual_str + ">"
+
+        def __str__(self):
+            return self.__repr__()
+
+        def __lt__(self, other):
+            assert isinstance(other, LOSComputationGraph.Node)
+            return self.idx < other.idx
+
+    def __init__(self, genome, under_connect=True):
+        """
+        Make the computation graph specified by the genoms.
+        :param genome: list, list of ints representing a genome.
+        """
+        self.graph = LOSComputationGraph.make_graph(genome)
+
+    def __len__(self):
+        return len(self.graph)
+
+    def __iter__(self):
+        return self.graph.__iter__()
+
+    def items(self):
+        return self.graph.items()
+
+    def keys(self):
+        return self.graph.keys()
+
+    def values(self):
+        return self.graph.values
+
+    def get_residual(self, node):
+        """
+        Determines if a particular node in the graph gets a residual connection.
+        :param node: LOSComputationGraph.Node.
+        :return: LOSComputationGraph.Node | None
+        """
+        if node in self.graph:
+            for dep in self.graph[node]:
+                if dep.resolution == node.resolution and dep.residual:
+                    return dep
+
+        return None
+
+    @staticmethod
+    def make_graph(genome, under_connect=True):
+        """
+        Make the computation graph.
+        The is not exactly an adjacency list... The normal forward path through the network is as expected, but the
+            skip connections are only listed in the receiving nodes, rather than the sending nodes.
+            This makes things much easier when actually forward propagating.
+        :param genome: list, list of ints representing a genome.
+        :param under_connect: bool, if false, we will not allow "under connections".
+            Where an under connection connects nodes that may occur below the current path. Ex:
+            | X ----->  X ----->  X
+            |   X --> X .. X --> X
+            |     X  ......  X
+            Where arrows are the normal residual connections and the dots are the optional under connections.
+        :return: OrderedDict, dict of lists, adjacency list describing the computation graph.
+        """
+        adj = OrderedDict()
+
+        nodes = [LOSComputationGraph.Node(pow(2, -(gene - 1)), i) for i, gene in enumerate(genome)]
+
+        # Construct the initial path through the graph, each node is connected to the one at the index in front of it.
+        # Read as "Gene i" and "Gene i plus one".
+        for i, (gene_i, gene_ipo) in enumerate(zip(nodes, nodes[1:])):
+            adj[gene_i] = [gene_ipo]
+
+        adj[nodes[-1]] = []
+
+        previous_resolutions = {}
+        previous_node = nodes[0]
+        for node, adj_list in adj.items():
+            if node.resolution in previous_resolutions:
+                # We have found a node that occurred before the current one with the same resolution.
+
+                if previous_node.resolution < node.resolution or \
+                   previous_node.resolution > node.resolution and under_connect:
+                    # Either we upsampled or downsampled. We always mark a residual and update the previous resolution
+                    # is we upsample. If we're allowing connections under the path, we do the same.
+                    previous_resolutions[node.resolution].residual = True
+                    adj[node].append(previous_resolutions[node.resolution])
+                    previous_resolutions[node.resolution] = node
+
+                else:
+                    # There was no change in resolution, just update previous_resolutions at this value to be
+                    # the current node.
+                    previous_resolutions[node.resolution] = node
+
+            else:
+                # We did not find a node before the current one that had its particular resolution.
+                previous_resolutions[node.resolution] = node
+
+            previous_node = node
+
+        return adj
+
+
+class HourGlassResidual(nn.Module):
+    """
+    Hour glass residual, As defined in https://arxiv.org/pdf/1603.06937.pdf.
+    Code converted from original lua: https://github.com/umich-vl/pose-hg-demo/blob/master/residual.lua
+    """
+    def __init__(self, in_channels, out_channels):
+        super(HourGlassResidual, self).__init__()
+
+        # 1x1 convolution to make the residual connection's channels match the output channels.
+        self.skip_layer = Identity() if in_channels == out_channels else \
+            nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=True), nn.BatchNorm2d(out_channels))
+
+        self.model = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels // 2, kernel_size=1, bias=True),
+            nn.BatchNorm2d(out_channels // 2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels // 2, out_channels // 2, kernel_size=3, stride=1, padding=1, bias=True),
+            nn.BatchNorm2d(out_channels // 2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels // 2, out_channels, kernel_size=1, bias=True),
+            nn.BatchNorm2d(out_channels)
+        )
+
+    def forward(self, x):
+        """
+        Apply forward propagation operation.
+        :param x: Variable, input.
+        :return: Variable
+        """
+        residual = x
+        out = self.model(x)
+        return out + self.skip_layer(residual)
+
+
 class ResidualGenomeDecoder(ChannelBasedDecoder):
     """
     Genetic CNN genome decoder with residual bit.
     """
+
     def __init__(self, list_genome, channels, preact=False):
         """
         Constructor.
@@ -101,6 +561,7 @@ class ResidualPhase(nn.Module):
     """
     Residual Genome phase.
     """
+
     def __init__(self, gene, in_channels, out_channels, idx, preact=False):
         """
         Constructor.
@@ -226,6 +687,7 @@ class ResidualNode(nn.Module):
     Basic computation unit.
     Does convolution, batchnorm, and relu (in this order).
     """
+
     def __init__(self, in_channels, out_channels, stride=1,
                  kernel_size=3, padding=1, bias=False):
         """
@@ -261,6 +723,7 @@ class PreactResidualNode(nn.Module):
     Basic computation unit.
     Does batchnorm, relu, and convolution (in this order).
     """
+
     def __init__(self, in_channels, out_channels, stride=1,
                  kernel_size=3, padding=1, bias=False):
         """
@@ -361,6 +824,7 @@ class DenseGenomeDecoder(ChannelBasedDecoder):
     """
     Genetic CNN genome decoder with residual bit.
     """
+
     def __init__(self, list_genome, channels):
         """
         Constructor.
@@ -400,6 +864,7 @@ class DensePhase(nn.Module):
     Phase with nodes that operates like DenseNet's bottle necking and growth rate scheme.
     Refer to: https://arxiv.org/pdf/1608.06993.pdf
     """
+
     def __init__(self, gene, in_channels, out_channels, idx):
         """
         Constructor.
@@ -493,7 +958,7 @@ class DenseNode(nn.Module):
     Refer to: https://arxiv.org/pdf/1608.06993.pdf
     """
     t = 32  # Growth rate fixed at 32 (a hyperparameter, although fixed in paper)
-    k = 4   # Growth rate multiplier fixed at 4 (not a hyperparameter, this is from the definition of the dense layer).
+    k = 4  # Growth rate multiplier fixed at 4 (not a hyperparameter, this is from the definition of the dense layer).
 
     def __init__(self, in_channels):
         """
@@ -530,6 +995,7 @@ class GCNNGenomeDecoder(Decoder):
     """
     Original genetic CNN genome from: https://arxiv.org/abs/1703.01513
     """
+
     def __init__(self, list_genome):
         super().__init__(list_genome)
         pass
@@ -544,6 +1010,7 @@ class DONGenomeDecoder(Decoder):
     DON refers to the channel size strategy which either doubles or does before a phase.
     Also defines residual as ResidualGenome does.
     """
+
     def __init__(self, list_genome):
         super().__init__(list_genome)
         pass
@@ -556,6 +1023,7 @@ class Identity(nn.Module):
     """
     Adding an identity allows us to keep things general in certain places.
     """
+
     def __init__(self):
         super(Identity, self).__init__()
 
@@ -565,7 +1033,7 @@ class Identity(nn.Module):
 
 def demo():
     """
-    Build a network and show its backprop graph..
+    Build a network and show its backprop graph.
     """
     from plugins.backprop_visualizer import make_dot_backprop
     from plugins.genome_visualizer import make_dot_genome
@@ -599,7 +1067,7 @@ def demo():
 
     model = DenseGenomeDecoder(genome, channels).get_model()
     out = model(torch.autograd.Variable(data))
-    print(model)
+
     make_dot_backprop(out).view()
 
 
