@@ -107,10 +107,7 @@ class LOSHourGlassDecoder(HourGlassDecoder, nn.Module):
     GENE_LB = 0  # Gene must be greater than this value.
     GENE_UB = 6  # Gene must be less than this value.
 
-    TO_RESIDUALS = 32   # Number of feature maps input to the initial residual units.
-    TO_HOURGLASS = 64  # Number of feature maps input to the hourglasses.
-
-    def __init__(self, genome, n_stacks, out_feature_maps):
+    def __init__(self, genome, n_stacks, out_feature_maps, pre_hourglass_channels=32, hourglass_channels=64):
         """
         Constructor.
         :param genome: list, list of ints satisfying properties defined in self.valid_genome.
@@ -120,46 +117,49 @@ class LOSHourGlassDecoder(HourGlassDecoder, nn.Module):
         HourGlassDecoder.__init__(self, genome, n_stacks, out_feature_maps)
         nn.Module.__init__(self)
 
+        self.pre_hourglass_channels = pre_hourglass_channels
+        self.hourglasses_channels = hourglass_channels
+
         self.check_genome(genome)
 
         # Initial resolution reducing, takes 256 x 256 to 64 x 64
         self.initial = nn.Sequential(
-            nn.Conv2d(3, self.TO_RESIDUALS, kernel_size=7, stride=2, padding=3, bias=True),
-            nn.BatchNorm2d(self.TO_RESIDUALS),
+            nn.Conv2d(3, self.pre_hourglass_channels, kernel_size=7, stride=2, padding=3, bias=True),
+            nn.BatchNorm2d(self.pre_hourglass_channels),
             nn.ReLU(inplace=True),
-            HourGlassResidual(self.TO_RESIDUALS, self.TO_RESIDUALS)
+            HourGlassResidual(self.pre_hourglass_channels, self.pre_hourglass_channels)
         )
 
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.secondary = nn.Sequential(
-            HourGlassResidual(self.TO_RESIDUALS, self.TO_RESIDUALS),
-            HourGlassResidual(self.TO_RESIDUALS, self.TO_HOURGLASS)
+            HourGlassResidual(self.pre_hourglass_channels, self.pre_hourglass_channels),
+            HourGlassResidual(self.pre_hourglass_channels, self.hourglass_channels)
         )
 
         #
         # Evolved part follows.
         #
         graph = LOSComputationGraph(genome)  # The evolved computation graph.
-        hg_channels = self.TO_HOURGLASS * LOSHourGlassBlock.EXPANSION  # Number of channels output by the hourglass.
+        hg_channels = self.hourglass_channels * LOSHourGlassBlock.EXPANSION  # Number of channels output by the hourglass.
 
         # List of hourglasses, deep copy of hourglass constructed above.
-        hourglasses = [LOSHourGlassBlock(graph, self.TO_HOURGLASS, hg_channels)]
+        hourglasses = [LOSHourGlassBlock(graph, self.hourglass_channels, hg_channels)]
 
         # Lin layers run on the output of the hourglass.
         first_lin = [Lin(hg_channels, hg_channels)]
-        second_lin = [Lin(hg_channels, self.TO_HOURGLASS)]
+        second_lin = [Lin(hg_channels, self.hourglass_channels)]
 
         # 1x1 convs to adjust channels to fit number of scoremaps.
-        to_score_map = [nn.Conv2d(self.TO_HOURGLASS, out_feature_maps, kernel_size=1, bias=True)]
+        to_score_map = [nn.Conv2d(self.hourglass_channels, out_feature_maps, kernel_size=1, bias=True)]
         # 1x1 convs to adjust scoremap back to appropriate feature map count.
-        from_score_map = [nn.Conv2d(out_feature_maps, self.TO_HOURGLASS + self.TO_RESIDUALS, kernel_size=1, bias=True)]
+        from_score_map = [nn.Conv2d(out_feature_maps, self.hourglass_channels + self.pre_hourglass_channels, kernel_size=1, bias=True)]
 
         # 1x1 convs for the skip connection that skips the hourglass.
-        skip_convs = [nn.Conv2d(self.TO_HOURGLASS + self.TO_RESIDUALS, self.TO_HOURGLASS + self.TO_RESIDUALS,
+        skip_convs = [nn.Conv2d(self.hourglass_channels + self.pre_hourglass_channels, self.hourglass_channels + self.pre_hourglass_channels,
                                 kernel_size=1, bias=True)]
 
-        skip_channels = self.TO_RESIDUALS
+        skip_channels = self.pre_hourglass_channels
 
         #
         # The above and proceeding code is overly complex to deal with the fact that the first skip connection will
@@ -167,11 +167,11 @@ class LOSHourGlassDecoder(HourGlassDecoder, nn.Module):
         #
 
         for i in range(1, n_stacks):
-            hourglasses.append(LOSHourGlassBlock(graph, self.TO_HOURGLASS + skip_channels, hg_channels))
+            hourglasses.append(LOSHourGlassBlock(graph, self.hourglass_channels + skip_channels, hg_channels))
             first_lin.append(Lin(hg_channels, hg_channels))
 
-            to_score_map.append(nn.Conv2d(self.TO_HOURGLASS, out_feature_maps, kernel_size=1, bias=True))
-            second_lin.append(Lin(hg_channels, self.TO_HOURGLASS))
+            to_score_map.append(nn.Conv2d(self.hourglass_channels, out_feature_maps, kernel_size=1, bias=True))
+            second_lin.append(Lin(hg_channels, self.hourglass_channels))
 
             # We only need go back to the original channel sizes from the score maps n - 1 times.
             if i < n_stacks - 1:
@@ -179,7 +179,7 @@ class LOSHourGlassDecoder(HourGlassDecoder, nn.Module):
                 from_score_map.append(nn.Conv2d(out_feature_maps, hg_channels, kernel_size=1,
                                                 bias=True))
 
-            skip_channels = self.TO_HOURGLASS
+            skip_channels = self.hourglass_channels
 
         # Register everything by converting to ModuleLists.
         self.hourglasses = nn.ModuleList(hourglasses)
@@ -281,10 +281,9 @@ class LOSHourGlassBlock(nn.Module):
     HourGlassBlock, repeated in an hourglass-type network.
     """
 
-    CHANNELS = 64  # Hour glass will operate at this channel size.
     EXPANSION = 2  # Hour glass block will increase channels by a factor of 2.
 
-    def __init__(self, graph, in_channels, out_channels):
+    def __init__(self, graph, in_channels, out_channels, operating_channels=64):
         """
         Constructor.
         :param graph: decoder.LOSComputationGraph, represents the computation flow.
@@ -292,6 +291,8 @@ class LOSHourGlassBlock(nn.Module):
         :param out_channels: int, number of output channels.
         """
         super(LOSHourGlassBlock, self).__init__()
+
+        self.operating_channels = operating_channels
 
         self.graph = graph
         samplers = []
@@ -305,7 +306,7 @@ class LOSHourGlassBlock(nn.Module):
         skip_ops = []  # HourGlassResiduals for the skip connections
         for node in graph.keys():
             if node.residual:
-                skip_ops.append(HourGlassResidual(self.CHANNELS, self.CHANNELS))
+                skip_ops.append(HourGlassResidual(self.operating_channels, self.operating_channels))
 
             else:
                 skip_ops.append(None)  # Filler to make the indices match
@@ -314,15 +315,15 @@ class LOSHourGlassBlock(nn.Module):
         res = graph.get_residual(last_node)
         if res:
             # If the last node receives a residual, we need to change the operation to output the right channel size.
-            skip_ops[res.idx] = HourGlassResidual(self.CHANNELS, out_channels)
+            skip_ops[res.idx] = HourGlassResidual(self.operating_channels, out_channels)
 
         self.skip_ops = nn.ModuleList(skip_ops)
 
-        path_ops = [HourGlassResidual(in_channels, self.CHANNELS)]
+        path_ops = [HourGlassResidual(in_channels, self.operating_channels)]
         for i in range(len(graph) - 2):
-            path_ops.append(HourGlassResidual(self.CHANNELS, self.CHANNELS))
+            path_ops.append(HourGlassResidual(self.operating_channels, self.operating_channels))
 
-        path_ops.append(HourGlassResidual(self.CHANNELS, out_channels))
+        path_ops.append(HourGlassResidual(self.operating_channels, out_channels))
 
         self.path_ops = nn.ModuleList(path_ops)
 

@@ -11,3 +11,4 @@ from models.net import *
 from models.preactresnet import *
 from models.sphereface import *
 from models.model_utils import *
+from models.evohourglass import *

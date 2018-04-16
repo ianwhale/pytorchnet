@@ -5,17 +5,19 @@ import torch.nn as nn
 from evolution import HourGlassResidual, LOSHourGlassDecoder
 
 
-def get_decoder(decoder_str, genome, n_stacks, out_channels):
+def get_decoder(decoder_str, genome, n_stacks, out_channels, pre_hourglass_channels, hourglass_channels):
     """
     Construct the appropriate decoder.
     :param decoder_str: string, refers to what genome scheme we're using.
     :param genome: list, the genome.
     :param n_stacks: int, number of hourglasses to use.
     :param out_channels: int, number of output feature maps.
+    :param pre_hourglass_channels: int, channels used in the operations before the hourglass.
+    :param hourglass_channels: int, channels used in the operations inside the hourglass.
     :return: evolution.HourGlassDecoder
     """
     if decoder_str == "los":  # "Line of sight" decoder.
-        return LOSHourGlassDecoder(genome, n_stacks, out_channels)
+        return LOSHourGlassDecoder(genome, n_stacks, out_channels, pre_hourglass_channels, hourglass_channels)
 
     raise NotImplementedError("Decoder {} not implemented.".format(decoder_str))
 
@@ -26,7 +28,8 @@ class EvoHourGlass(nn.Module):
     Repeats the evolved block.
     """
 
-    def __init__(self, genome, n_stacks, out_channels, decoder="los"):
+    def __init__(self, genome, n_stacks, out_channels, decoder="los",
+                 pre_hourglass_channels=32, hourglass_channels=64):
         """
         EvoHourGlass constructor.
         :param genome: list, list of ints, represents the genome.
@@ -36,7 +39,8 @@ class EvoHourGlass(nn.Module):
         """
         super(EvoHourGlass, self).__init__()
 
-        self.model = get_decoder(decoder, genome, n_stacks, out_channels).get_model()
+        self.model = get_decoder(decoder, genome, n_stacks, out_channels, pre_hourglass_channels,
+                                 hourglass_channels).get_model()
 
     def forward(self, x):
         return self.model(x)
