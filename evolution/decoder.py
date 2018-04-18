@@ -118,7 +118,7 @@ class LOSHourGlassDecoder(HourGlassDecoder, nn.Module):
         nn.Module.__init__(self)
 
         self.pre_hourglass_channels = pre_hourglass_channels
-        self.hourglasses_channels = hourglass_channels
+        self.hourglass_channels = hourglass_channels
 
         self.check_genome(genome)
 
@@ -369,7 +369,9 @@ class LOSHourGlassBlock(nn.Module):
 
             res = self.graph.get_residual(node)
             if res:
+                # Current node receives a residual connection.
                 x += residuals[res.idx]
+                residuals[res.idx] = None  # Free some memory, we'll never need this again.
 
             x = self.samplers[i + 1](x)
 
@@ -424,7 +426,7 @@ class LOSComputationGraph:
         return self.graph.keys()
 
     def values(self):
-        return self.graph.values
+        return self.graph.values()
 
     def get_residual(self, node):
         """
