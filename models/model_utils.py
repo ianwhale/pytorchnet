@@ -18,7 +18,7 @@ def prod(items):
 
 class ParamCounter:
     def __init__(self, output_var):
-        assert isinstance(output_var, Variable)
+        assert isinstance(output_var, Variable), "Type {} is not a torch.autograd.Variable.".format(type(output_var))
 
         self.seen = set()
         self.count = 0

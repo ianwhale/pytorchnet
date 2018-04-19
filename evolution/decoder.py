@@ -312,7 +312,7 @@ class LOSHourGlassBlock(nn.Module):
                 skip_ops.append(None)  # Filler to make the indices match
 
         last_node = list(graph.keys())[-1]
-        res = graph.get_residual(last_node)
+        res = last_node.residual_node
         if res:
             # If the last node receives a residual, we need to change the operation to output the right channel size.
             skip_ops[res.idx] = HourGlassResidual(self.operating_channels, out_channels)
@@ -359,21 +359,19 @@ class LOSHourGlassBlock(nn.Module):
     def forward(self, x):
         residuals = [None for _ in range(len(self.graph))]
 
-        x = self.samplers[0](x)
+        for i, (node, _) in enumerate(self.graph.items()):
+            x = self.samplers[i](x)
 
-        for i, (node, dependancies) in enumerate(self.graph.items()):
             x = self.path_ops[i](x)
 
             if node.residual:
                 residuals[i] = self.skip_ops[i](x)
 
-            res = self.graph.get_residual(node)
+            res = node.residual_node
             if res:
                 # Current node receives a residual connection.
                 x += residuals[res.idx]
                 residuals[res.idx] = None  # Free some memory, we'll never need this again.
-
-            x = self.samplers[i + 1](x)
 
         return self.samplers[-1](x)
 
@@ -394,6 +392,7 @@ class LOSComputationGraph:
             :param residual: bool, true if output of this node is needed at some point later in the graph.
             """
             self.resolution, self.idx, self.residual = resolution, idx, residual
+            self.residual_node = None  # If this node receives a residual, store it here.
 
         def __repr__(self):
             residual_str = ", saves residual" if self.residual else ""
@@ -411,7 +410,7 @@ class LOSComputationGraph:
         Make the computation graph specified by the genoms.
         :param genome: list, list of ints representing a genome.
         """
-        self.graph = LOSComputationGraph.make_graph(genome)
+        self.graph = LOSComputationGraph.make_graph(genome, under_connect)
 
     def __len__(self):
         return len(self.graph)
@@ -479,7 +478,7 @@ class LOSComputationGraph:
                     # Either we upsampled or downsampled. We always mark a residual and update the previous resolution
                     # is we upsample. If we're allowing connections under the path, we do the same.
                     previous_resolutions[node.resolution].residual = True
-                    adj[node].append(previous_resolutions[node.resolution])
+                    node.residual_node = previous_resolutions[node.resolution]
                     previous_resolutions[node.resolution] = node
 
                 else:
