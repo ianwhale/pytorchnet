@@ -1,6 +1,7 @@
 import torch
 import random
 import unittest
+from collections import defaultdict
 from evolution import LOSComputationGraph, LOSHourGlassBlock, LOSHourGlassDecoder, Identity
 
 
@@ -182,13 +183,22 @@ class TestLOSHourGlassDecoder(unittest.TestCase):
 
         data = torch.autograd.Variable(torch.rand(1, 3, 256, 256))
 
+        used = defaultdict(bool)
+
         for _ in range(500):
             genome = self.get_random_genome()
+
+            while str(genome) in used:
+                genome = self.get_random_genome()
+
+            used[str(genome)] = True
 
             print("Evaluating {}".format(genome))
 
             model = LOSHourGlassDecoder(genome, 2, 2)
-            model(data)
+            out = model(data)
+            map_sum = torch.sum(out[-1])
+            map_sum.backward()
 
 
 if __name__ == "__main__":

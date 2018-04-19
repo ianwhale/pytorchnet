@@ -365,7 +365,7 @@ class LOSHourGlassBlock(nn.Module):
             x = self.path_ops[i](x)
 
             if node.residual:
-                residuals[i] = self.skip_ops[i](x)
+                residuals[i] = self.skip_ops[i](x.clone())
 
             res = node.residual_node
             if res:
