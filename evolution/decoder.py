@@ -961,7 +961,7 @@ class DensePhase(nn.Module):
             # Same as above, we just don't worry about the 0th node.
             return self.out(torch.cat([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]], dim=1))
 
-        return self.out(torch.cat([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]]))
+        return self.out(torch.cat([outputs[i] for i in self.dependency_graph[len(self.nodes) + 1]], dim=1))
 
 
 class DenseNode(nn.Module):
@@ -1074,7 +1074,7 @@ def demo():
         ]
     ]
 
-    channels = [(3, 8), (8, 8), (8, 8)]
+    channels = [(3, 32), (32, 32), (32, 8)]
     data = torch.randn(16, 3, 32, 32)
 
     chopped = [gene[:-1] for gene in genome]
