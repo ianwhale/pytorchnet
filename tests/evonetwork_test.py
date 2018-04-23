@@ -1,6 +1,7 @@
 import torch
 import unittest
 from random import getrandbits
+from collections import defaultdict
 from models.evonetwork import EvoNetwork
 
 
@@ -88,10 +89,17 @@ class TestEvoNetwork(unittest.TestCase):
         data_shape = (32, 32)
         g = GenomeGenerator()
 
-        while n > 0:
+        used = defaultdict(bool)
+
+        for _ in range(n):
             genome = g.get_random_genome()
 
-            print("Testing: {}".format(genome))
+            while str(genome) in used:
+                genome = g.get_random_genome()
+
+            used[str(genome)] = True
+
+            print("\rEvaluating {}".format(genome), end="", flush=True)
 
             net = EvoNetwork(genome, channels, out_features, data_shape, decoder="dense")
             net(data)

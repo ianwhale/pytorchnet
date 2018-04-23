@@ -193,7 +193,7 @@ class TestLOSHourGlassDecoder(unittest.TestCase):
 
             used[str(genome)] = True
 
-            print("Evaluating {}".format(genome))
+            print("\rEvaluating {}".format(genome), end="", flush=True)
 
             model = LOSHourGlassDecoder(genome, 2, 2)
             out = model(data)
