@@ -827,11 +827,12 @@ class DenseGenomeDecoder(ChannelBasedDecoder):
     Genetic CNN genome decoder with residual bit.
     """
 
-    def __init__(self, list_genome, channels):
+    def __init__(self, list_genome, channels, increase_t=True):
         """
         Constructor.
         :param list_genome: list, genome describing the connections in a network.
         :param channels: list, list of tuples describing the channel size changes.
+        :param increase_t: int, should we increase growth rate after max pooling?
         """
         super().__init__(list_genome, channels)
 
@@ -839,9 +840,13 @@ class DenseGenomeDecoder(ChannelBasedDecoder):
             return  # Exit if the parent constructor set the model.
 
         # Build up the appropriate number of phases.
+        t = DenseNode.t
         phases = []
         for idx, (gene, (in_channels, out_channels)) in enumerate(zip(self._genome, self._channels)):
-            phases.append(DensePhase(gene, in_channels, out_channels, idx))
+            phases.append(DensePhase(gene, in_channels, out_channels, idx, t))
+
+            if increase_t:
+                t *= 2
 
         self._model = nn.Sequential(*self.build_layers(phases))
 
@@ -867,18 +872,22 @@ class DensePhase(nn.Module):
     Refer to: https://arxiv.org/pdf/1608.06993.pdf
     """
 
-    def __init__(self, gene, in_channels, out_channels, idx):
+    def __init__(self, gene, in_channels, out_channels, idx, t=None):
         """
         Constructor.
         :param gene: list, element of genome describing connections in this phase.
         :param in_channels: int, number of input channels.
         :param out_channels: int, number of output channels.
         :param idx: int, index in the network.
+        :param t: int, optional growth rate.
         """
         super(DensePhase, self).__init__()
 
+        if t is None:
+            t = DenseNode.t
+
         self.in_channel_flag = in_channels != out_channels  # Flag to tell us if we need to increase channel size.
-        self.out_channel_flag = out_channels != DenseNode.t
+        self.out_channel_flag = out_channels != t
         self.first_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1 if idx != 0 else 3, stride=1, bias=False)
         self.dependency_graph = ResidualPhase.build_dependency_graph(gene)
 
@@ -889,15 +898,15 @@ class DensePhase(nn.Module):
                 channel_adjustment += out_channels
 
             else:
-                channel_adjustment += DenseNode.t
+                channel_adjustment += t
 
         self.last_conv = nn.Conv2d(channel_adjustment, out_channels, kernel_size=1, stride=1, bias=False)
 
         nodes = []
         for i in range(len(gene)):
             if len(self.dependency_graph[i + 1]) > 0:
-                channels = self.compute_channels(self.dependency_graph[i + 1], out_channels)
-                nodes.append(DenseNode(channels))
+                channels = self.compute_channels(self.dependency_graph[i + 1], out_channels, t)
+                nodes.append(DenseNode(channels, t))
 
             else:
                 nodes.append(None)
@@ -910,11 +919,12 @@ class DensePhase(nn.Module):
         )
 
     @staticmethod
-    def compute_channels(dependency, out_channels):
+    def compute_channels(dependency, out_channels, t):
         """
         Compute the number of channels incoming to a node.
         :param dependency: list, nodes that a particular node gets input from.
         :param out_channels: int, desired number of output channels from the phase.
+        :param t: int, growth rate.
         :return: int
         """
         channels = 0
@@ -923,7 +933,7 @@ class DensePhase(nn.Module):
                 channels += out_channels
 
             else:
-                channels += DenseNode.t
+                channels += t
 
         return channels
 
@@ -962,13 +972,16 @@ class DenseNode(nn.Module):
     t = 32  # Growth rate fixed at 32 (a hyperparameter, although fixed in paper)
     k = 4  # Growth rate multiplier fixed at 4 (not a hyperparameter, this is from the definition of the dense layer).
 
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, t=None):
         """
         Constructor.
         Only needs number of input channels, everything else is automatic from growth rate and DenseNet specs.
         :param in_channels: int, input channels.
         """
         super(DenseNode, self).__init__()
+
+        if t:
+            self.t = t
 
         self.model = nn.Sequential(
             nn.BatchNorm2d(in_channels),
