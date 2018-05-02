@@ -154,7 +154,7 @@ class TestLOSHourGlassBlock(unittest.TestCase):
 class TestLOSHourGlassDecoder(unittest.TestCase):
 
     @staticmethod
-    def get_random_genome(length=9, resolution_range=(1, 5)):
+    def get_random_genome(length=11, resolution_range=(1, 5)):
         """
         Generate a random hourglass genome.
         :param length: int, how long the genome should be.
@@ -184,8 +184,9 @@ class TestLOSHourGlassDecoder(unittest.TestCase):
         data = torch.autograd.Variable(torch.rand(1, 3, 256, 256))
 
         used = defaultdict(bool)
+        n = 500
 
-        for _ in range(500):
+        for i in range(n):
             genome = self.get_random_genome()
 
             while str(genome) in used:
@@ -193,7 +194,7 @@ class TestLOSHourGlassDecoder(unittest.TestCase):
 
             used[str(genome)] = True
 
-            print("\rEvaluating {}".format(genome), end="", flush=True)
+            print("\rEvaluating {}  ({}/{})".format(genome, i+1, n), end="", flush=True)
 
             model = LOSHourGlassDecoder(genome, 2, 2)
             out = model(data)

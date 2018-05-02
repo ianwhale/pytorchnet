@@ -508,14 +508,15 @@ class HourGlassResidual(nn.Module):
             nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=True), nn.BatchNorm2d(out_channels))
 
         self.model = nn.Sequential(
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(inplace=True),
             nn.Conv2d(in_channels, out_channels // 2, kernel_size=1, bias=True),
             nn.BatchNorm2d(out_channels // 2),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels // 2, out_channels // 2, kernel_size=3, stride=1, padding=1, bias=True),
             nn.BatchNorm2d(out_channels // 2),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels // 2, out_channels, kernel_size=1, bias=True),
-            nn.BatchNorm2d(out_channels)
+            nn.Conv2d(out_channels // 2, out_channels, kernel_size=1, bias=True)
         )
 
     def forward(self, x):
@@ -1052,33 +1053,14 @@ def demo():
     """
     from plugins.backprop_visualizer import make_dot_backprop
     from plugins.genome_visualizer import make_dot_genome
-    genome = [
-        [
-            [1],
-            [0, 0],
-            [1, 0, 0],
-            [1]
-        ],
-        [  # Phase will be ignored, there are no active connections (residual is not counted as active).
-            [0],
-            [0, 0],
-            [0, 0, 0],
-            [1]
-        ],
-        [
-            [1],
-            [0, 0],
-            [0, 0, 0],
-            [0, 0, 0, 0],
-            [1]
-        ]
-    ]
+    genome = [[[1], [0, 1], [0, 1, 0], [1, 1, 0, 1], [1, 0, 1, 0, 0], [0]],
+              [[0], [0, 1], [0, 0, 1], [0, 1, 0, 1], [1, 0, 1, 1, 1], [0]],
+              [[1], [0, 0], [0, 1, 0], [0, 0, 1, 1], [1, 1, 0, 1, 1], [1]]]
 
-    channels = [(3, 32), (32, 32), (32, 8)]
+    channels = [(3, 32), (32, 32), (32, 32)]
     data = torch.randn(16, 3, 32, 32)
 
-    chopped = [gene[:-1] for gene in genome]
-    make_dot_genome(chopped).view()
+    make_dot_genome(genome).view()
 
     model = DenseGenomeDecoder(genome, channels).get_model()
     out = model(torch.autograd.Variable(data))
